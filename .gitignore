@@ -1,5 +1,7 @@
-node_modules/
-data-cache/
-public/data/timetable.json
+
 .env*
+.wrangler/
+data-cache/
 dist/
+node_modules/
+public/data/timetable.json

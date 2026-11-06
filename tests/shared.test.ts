@@ -40,6 +40,16 @@ describe('protobuf', () => {
     const f = feed(entity('a', 'A', []), entity('b', 'B', []));
     expect(parseTripUpdates(f, (id) => id === 'B').map((x) => x.tripId)).toEqual(['B']);
   });
+  it('skips other operators by prefix without reading their stops', () => {
+    const f = feed(
+      entity('a', 'AKT:ServiceJourney:1', [stopUpdate(1, 'NSR:Quay:9', undefined, { delay: 5 })]),
+      entity('b', 'RUT:ServiceJourney:2', [stopUpdate(1, 'NSR:Quay:1', undefined, { delay: 30 })]),
+      entity('c', 'RU', []),
+    );
+    const u = parseTripUpdates(f, undefined, 'RUT:ServiceJourney:');
+    expect(u.map((x) => x.tripId)).toEqual(['RUT:ServiceJourney:2']);
+    expect(u[0].stops[0].departure).toEqual({ delay: 30 });
+  });
   it('fails whole on a cut feed', () => {
     const f = feed(entity('a', 'RUT:ServiceJourney:x', [stopUpdate(1, 'NSR:Quay:1', undefined, { delay: 30 })]));
     expect(() => parseTripUpdates(f.slice(0, f.length - 3))).toThrow();

@@ -5,6 +5,8 @@ export interface StopEvent { time?: number; delay?: number }
 export interface StopUpdate { sequence?: number; stopId?: string; arrival?: StopEvent; departure?: StopEvent; skipped: boolean }
 export interface TripUpdate { tripId: string; canceled: boolean; stops: StopUpdate[] }
 
+const decoder = new TextDecoder();
+
 export class Reader {
   at = 0;
   // Reading past the end throws, so a cut or broken feed fails whole instead of parsing in part.
@@ -62,7 +64,17 @@ export class Reader {
 
   string(): string {
     const r = this.sub();
-    return new TextDecoder().decode(this.bytes.subarray(r.at, r.end));
+    return decoder.decode(this.bytes.subarray(r.at, r.end));
+  }
+
+  /** The next length-delimited field's bytes start with `prefix`, without reading it. */
+  nextStartsWith(prefix: Uint8Array): boolean {
+    const save = this.at;
+    const length = this.length();
+    let ok = length >= prefix.length;
+    for (let i = 0; ok && i < prefix.length; i++) ok = this.bytes[this.at + i] === prefix[i];
+    this.at = save;
+    return ok;
   }
 
   skip(wire: number): void {
@@ -102,17 +114,26 @@ function stopTimeUpdate(r: Reader): StopUpdate {
   return stop;
 }
 
-/** TripUpdate: trip = 1 (TripDescriptor: trip_id = 1, schedule_relationship = 4, 3 is CANCELED), stop_time_update = 2. */
-function tripUpdate(r: Reader): TripUpdate {
+/**
+ * TripUpdate: trip = 1 (TripDescriptor: trip_id = 1, schedule_relationship = 4, 3 is CANCELED), stop_time_update = 2.
+ * The trip comes first, so for a trip `wanted` turns down the rest is skipped unread: most of the national feed.
+ */
+function tripUpdate(r: Reader, wanted?: (tripId: string) => boolean, prefix?: Uint8Array): TripUpdate {
   const update: TripUpdate = { tripId: '', canceled: false, stops: [] };
+  let skipRest = false;
   r.each((n, wire) => {
+    if (skipRest) return r.skip(wire);
     if (n === 1 && wire === 2) {
       const trip = r.sub();
       trip.each((m, w) => {
-        if (m === 1 && w === 2) update.tripId = trip.string();
-        else if (m === 4 && w === 0) update.canceled = trip.varint() === 3;
+        if (m === 1 && w === 2) {
+          if (prefix && !trip.nextStartsWith(prefix)) trip.skip(w); // another operator's trip: not even decoded
+          else update.tripId = trip.string();
+        } else if (m === 4 && w === 0) update.canceled = trip.varint() === 3;
         else trip.skip(w);
       });
+      if (prefix && !update.tripId) skipRest = true;
+      else if (wanted && update.tripId && !wanted(update.tripId)) skipRest = true;
     } else if (n === 2 && wire === 2) update.stops.push(stopTimeUpdate(r.sub()));
     else r.skip(wire);
   });
@@ -121,9 +142,11 @@ function tripUpdate(r: Reader): TripUpdate {
 
 /**
  * Every trip update in a GTFS-realtime FeedMessage (FeedMessage.entity = 2, FeedEntity.trip_update = 3).
- * `wanted` drops every other trip, which is most of the feed.
+ * `wanted` drops every other trip, which is most of the feed; `prefix` ("RUT:") drops the trips of other operators
+ * before their ids are even decoded.
  */
-export function parseTripUpdates(bytes: Uint8Array, wanted?: (tripId: string) => boolean): TripUpdate[] {
+export function parseTripUpdates(bytes: Uint8Array, wanted?: (tripId: string) => boolean, prefix?: string): TripUpdate[] {
+  const start = prefix ? new TextEncoder().encode(prefix) : undefined;
   const updates: TripUpdate[] = [];
   const feed = new Reader(bytes);
   feed.each((n, wire) => {
@@ -131,7 +154,7 @@ export function parseTripUpdates(bytes: Uint8Array, wanted?: (tripId: string) =>
     const entity = feed.sub();
     entity.each((m, w) => {
       if (m !== 3 || w !== 2) return entity.skip(w);
-      const update = tripUpdate(entity.sub());
+      const update = tripUpdate(entity.sub(), wanted, start);
       if (update.tripId && (!wanted || wanted(update.tripId))) updates.push(update);
     });
   });

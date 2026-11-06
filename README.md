@@ -1,6 +1,6 @@
 # oslo-buss
 
-Fanprosjekt: Oslo-busser som lyspunkt på eit kart, med sanntid frå Entur. Fase 1: datapipeline og relay. Fase 2: 3D-kart med bussar som lyspunkt. Fase 3: vegar og bygg frå OpenStreetMap.
+Fanprosjekt: Oslo-busser som lyspunkt på eit kart, med sanntid frå Entur. Fase 1: datapipeline og relay. Fase 2: 3D-kart med bussar som lyspunkt. Fase 3: vegar og bygg frå OpenStreetMap. Fase 4: hosting på Cloudflare (`docs/HOSTING.md`).
 Linjer til å byrje med: **20** (Skøyen – Galgeberg), **31** (Snarøya – Grorud) og **63** (Grorud T – Romsås ring).
 
 ```bash
@@ -11,6 +11,8 @@ npm run smoke       # sjekk mot Entur: skriv ut bussane som er på vegen no
 npm run dev         # 3D-kartet på http://localhost:5173 (relayen køyrer inne i dev-tenaren)
 npm run relay       # relayen åleine: http://localhost:5190/feeds/buses
 npm test
+npm run worker      # heile Cloudflare-oppsettet lokalt (etter npm run build): http://127.0.0.1:8787
+npm run deploy      # publiserer til Cloudflare (sjå docs/HOSTING.md)
 ```
 
 ## Korleis det heng saman
