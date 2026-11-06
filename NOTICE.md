@@ -15,3 +15,5 @@ Dataene er filtrert og bearbeidet: busposisjonar er berekna frå rutetabell og s
 Fanprosjekt. Ikkje tilknytt eller støtta av Ruter eller Entur.
 
 Kart: © OpenStreetMap-bidragsytarar (ODbL), https://www.openstreetmap.org/copyright. `public/data/map.json` er eit utval av desse dataa og følgjer ODbL.
+
+Kartdata © Kartverket, lisens CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). Frå Geonorge: N50 Kartdata, NVDB Vegnett Pluss, Matrikkelen – Bygningspunkt og Nasjonal høgdemodell (DTM/DOM). Dataa er bearbeidde (forenkla, klipte til fliser, byggehøgd rekna ut frå overflate- minus terrengmodell). Sjå `docs/KARTVERKET.md`. Kartverket-logoen er ikkje brukt, og Kartverket støttar ikkje prosjektet.

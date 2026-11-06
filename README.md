@@ -13,6 +13,8 @@ npm run smoke       # sjekk mot Entur: skriv ut bussane som er på vegen no
 npm run dev         # 3D-kartet på http://localhost:5173 (relayen køyrer inne i dev-tenaren)
 npm run relay       # relayen åleine: http://localhost:5190/feeds/buses
 npm test
+npm run kartverket:download   # opne Kartverket-data for Oslo/Bærum til data-cache/kartverket/ (sjå docs/KARTVERKET.md)
+npm run kartverket:tiles      # lagar fliser i data-cache/tiles/
 npm run worker      # heile Cloudflare-oppsettet lokalt (etter npm run build): http://127.0.0.1:8787
 npm run deploy      # publiserer til Cloudflare (sjå docs/HOSTING.md)
 ```
@@ -39,7 +41,8 @@ Entur ber alle klientar sende `ET-Client-Name` (`firma-applikasjon`). Namnet st�
 Inneholder data under Norsk lisens for offentlige data (NLOD) tilgjengeliggjort av Entur AS
 ([lisens](https://data.norge.no/nlod/en/2.0)). Dataene er filtrert og bearbeidet.
 Kart © [OpenStreetMap-bidragsytarar](https://www.openstreetmap.org/copyright) (ODbL), henta via Overpass.
-Fanprosjekt, ikkje tilknytt eller støtta av Ruter eller Entur. Sjå `NOTICE.md`.
+Kartfliser frå Kartverket (greina `kartverket-data`, `docs/KARTVERKET.md`): Kartdata © Kartverket (CC BY 4.0).
+Fanprosjekt, ikkje tilknytt eller støtta av Ruter, Entur eller Kartverket. Sjå `NOTICE.md`.
 
 ## Lisens
 
