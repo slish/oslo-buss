@@ -1,0 +1,22 @@
+{
+  "name": "oslo-buss",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Fanprosjekt: Oslo-busser som lyspunkt, basert på åpne data fra Entur",
+  "scripts": {
+    "timetable": "tsx scripts/build-timetable.ts",
+    "relay": "tsx src/relay/dev-server.ts",
+    "smoke": "tsx scripts/smoke.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@types/yauzl": "^3.4.0",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0",
+    "yauzl": "^3.4.0"
+  }
+}
