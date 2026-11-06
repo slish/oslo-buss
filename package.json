@@ -13,7 +13,8 @@
     "check-timetable": "tsx scripts/check-timetable.ts",
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "map": "tsx scripts/build-map.ts"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
@@ -27,5 +28,6 @@
   },
   "dependencies": {
     "three": "^0.187.0"
-  }
+  },
+  "license": "MIT"
 }

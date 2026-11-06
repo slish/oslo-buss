@@ -52,7 +52,7 @@ export class Glow {
     geometry.setAttribute('aSize', this.size);
     geometry.setAttribute('aAlpha', this.alpha);
     this.material = new ShaderMaterial({
-      vertexShader: vertex, fragmentShader: fragment, transparent: true, depthWrite: false, blending: AdditiveBlending,
+      vertexShader: vertex, fragmentShader: fragment, transparent: true, depthWrite: false, depthTest: false, blending: AdditiveBlending,
       uniforms: { uScale: { value: 1000 }, uMinPx: { value: minPx } },
     });
     this.points = new Points(geometry, this.material);

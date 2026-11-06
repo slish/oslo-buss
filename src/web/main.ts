@@ -1,5 +1,7 @@
 import { Color, GridHelper, Line, LineBasicMaterial, BufferGeometry, Float32BufferAttribute, PerspectiveCamera, Scene, Vector3, WebGLRenderer, AdditiveBlending } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import type { MapFile } from '../shared/map';
+import { buildBuildings, buildRoads } from './basemap';
 import { Glow } from './glow';
 import { BusStore, type Track } from './store';
 import { colorOf, toX, toZ } from './world';
@@ -42,8 +44,10 @@ for (const [id, shape] of store.timetable.shapes) {
   }
   const geometry = new BufferGeometry();
   geometry.setAttribute('position', new Float32BufferAttribute(points, 3));
-  const material = new LineBasicMaterial({ color: colorOf(lineOfShape.get(id) ?? ''), transparent: true, opacity: 0.32, blending: AdditiveBlending, depthWrite: false });
-  scene.add(new Line(geometry, material));
+  const material = new LineBasicMaterial({ color: colorOf(lineOfShape.get(id) ?? ''), transparent: true, opacity: 0.5, blending: AdditiveBlending, depthWrite: false, depthTest: false });
+  const road = new Line(geometry, material);
+  road.renderOrder = 1; // after the map, whatever the buildings in between: the lights show through
+  scene.add(road);
 }
 
 const grid = new GridHelper(80_000, 80, '#16203a', '#0c1424');
@@ -54,10 +58,25 @@ const stops = new Glow(Object.keys(file.stops).length, 2);
 const stopColor = new Color('#7d8aa3');
 for (const [, lat, lon] of Object.values(file.stops)) stops.add(toX(lon), 0, toZ(lat), stopColor, STOP_SIZE, 0.55);
 stops.commit();
+stops.points.renderOrder = 2;
 scene.add(stops.points);
 
 const buses = new Glow(512, 9);
+buses.points.renderOrder = 3;
 scene.add(buses.points);
+
+// ---- the map under it all: roads and buildings from OpenStreetMap, loaded once the lights are on ----
+void (async () => {
+  try {
+    const response = await fetch('/data/map.json');
+    if (!response.ok) return; // the map is optional: without it the lines and buses still show
+    const map = (await response.json()) as MapFile;
+    scene.add(buildRoads(map), buildBuildings(map));
+    scene.remove(grid);
+  } catch (e) {
+    console.warn('Kunne ikkje laste kartet', e);
+  }
+})();
 
 // ---- camera ----
 const center = new Vector3((minX + maxX) / 2, 0, (minZ + maxZ) / 2);
@@ -70,6 +89,8 @@ controls.maxPolarAngle = Math.PI * 0.46;
 controls.minDistance = 600;
 controls.maxDistance = 120_000;
 controls.update();
+// For looking at the scene from the console while developing: window.__oslo.camera, .controls, .toX, .toZ.
+if (import.meta.env.DEV) Object.assign(window, { __oslo: { camera, controls, toX, toZ } });
 
 function resize(): void {
   const ratio = Math.min(window.devicePixelRatio, 2);
