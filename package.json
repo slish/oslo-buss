@@ -10,14 +10,22 @@
     "smoke": "tsx scripts/smoke.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "check-timetable": "tsx scripts/check-timetable.ts"
+    "check-timetable": "tsx scripts/check-timetable.ts",
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
+    "@types/three": "^0.187.0",
     "@types/yauzl": "^3.4.0",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
+    "vite": "^8.3.6",
     "vitest": "^5.1.0",
     "yauzl": "^3.4.0"
+  },
+  "dependencies": {
+    "three": "^0.187.0"
   }
 }

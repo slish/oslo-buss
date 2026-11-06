@@ -105,6 +105,16 @@ describe('shapes', () => {
 });
 
 describe('position', () => {
+  it('tells the browser how to keep the bus moving: road, distance, speed and where it stops', () => {
+    const moving = busAt(tt, trip, '20261106', at(10 * 3600 + 150))!; // halfway through the 300 s leg A -> B (1112 m)
+    expect(moving).toMatchObject({ shape: 'S', dist: 556, until: 1112 });
+    expect(moving.speed).toBeCloseTo(1112 / 300, 1);
+    const standing = busAt(tt, trip, '20261106', at(10 * 3600 + 330))!;
+    expect(standing).toMatchObject({ dist: 1112, speed: 0, until: 1112 });
+    // What the browser does with it: the same place as the server's, a few seconds later.
+    const later = placeOnShape(tt.shapes.get('S')!, moving.dist + moving.speed * 10);
+    expect(later.lat).toBeGreaterThan(moving.lat);
+  });
   it('follows the plain timetable without an update', () => {
     expect(busAt(tt, trip, '20261106', at(10 * 3600 - 1))).toBeNull();
     const b = busAt(tt, trip, '20261106', at(10 * 3600 + 150))!; // halfway A -> B

@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="nn">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Oslo-buss: bussane i Oslo akkurat no</title>
+    <meta name="description" content="Fanprosjekt: bussar på linje 20, 31 og 63 som lyspunkt over Oslo, med sanntid frå Entur." />
+    <link rel="stylesheet" href="/src/web/style.css" />
+  </head>
+  <body>
+    <canvas id="scene" aria-label="Kart over bussar i Oslo"></canvas>
+    <header>
+      <h1>Oslo-buss</h1>
+      <p id="status">Hentar bussar…</p>
+      <ul id="legend"></ul>
+    </header>
+    <aside id="info" hidden></aside>
+    <footer>
+      Fanprosjekt, ikkje tilknytt eller støtta av Ruter eller Entur.
+      Inneholder data under <a href="https://data.norge.no/nlod/en/2.0" target="_blank" rel="noopener">Norsk lisens for offentlige data (NLOD)</a>
+      tilgjengeliggjort av Entur AS. Dataene er bearbeidet: posisjonar er berekna frå rutetabell og sanntidsforseinkingar, ikkje målte.
+    </footer>
+    <script type="module" src="/src/web/main.ts"></script>
+  </body>
+</html>

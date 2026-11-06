@@ -25,6 +25,12 @@ export interface Bus {
   live: boolean;
   /** Name of the stop it is heading for, or standing at. */
   next: string;
+  /** The road it follows (a key in the timetable's shapes) and how far along it the bus is, in meters. */
+  shape: string;
+  dist: number;
+  /** Meters per second along the road right now (0 at a stop), and where it stops moving: the next stop's distance. */
+  speed: number;
+  until: number;
 }
 
 export interface Place { lat: number; lon: number; bearing: number }
@@ -131,17 +137,17 @@ export function busAt(tt: Timetable, trip: Trip, date: string, nowMs: number, up
   let i = 0; // the last stop whose departure has passed
   while (i < n - 2 && e.dep[i + 1] <= t) i++;
   const dist = trip.pattern.dist;
-  let at: number, atStop: boolean, next: number;
+  let at: number, atStop: boolean, speed = 0;
+  const next = i + 1;
   if (t < e.arr[i + 1]) {
     const span = e.arr[i + 1] - e.dep[i];
     const f = span > 0 ? (t - e.dep[i]) / span : 1;
     at = dist[i] + (dist[i + 1] - dist[i]) * f;
     atStop = false;
-    next = i + 1;
+    if (span > 0) speed = (dist[i + 1] - dist[i]) / span;
   } else {
     at = dist[i + 1];
     atStop = true;
-    next = i + 1;
   }
   const shape = tt.shapes.get(trip.pattern.shape)!;
   const place = placeOnShape(shape, at);
@@ -155,6 +161,8 @@ export function busAt(tt: Timetable, trip: Trip, date: string, nowMs: number, up
     delay: Math.round(e.delay[atStop ? next : i]),
     atStop, live: e.live,
     next: tt.file.stops[trip.pattern.stops[next]]?.[0] ?? '',
+    shape: trip.pattern.shape,
+    dist: Math.round(at), speed: Math.round(speed * 10) / 10, until: dist[next],
   };
 }
 
