@@ -1,0 +1,49 @@
+name: Publiser
+
+# Publiserer til Cloudflare når main endrar seg, etter at typesjekk og testar er grøne. Treng to hemmelegheiter i repoet
+# (Settings → Secrets and variables → Actions): CLOUDFLARE_API_TOKEN og CLOUDFLARE_ACCOUNT_ID. Utan dei køyrer
+# sjekkane, men ingenting blir publisert. Sjå docs/HOSTING.md.
+#
+# Tidstabellen høyrer ikkje til her: Worker-en les han frå grenen `data` (workflow: Tidstabell).
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.github/workflows/ci.yml'
+      - '.github/workflows/timetable.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Éin publisering om gongen, og ei som ventar blir ikkje avbroten midt i opplastinga.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      HAS_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npx vite build
+      - name: Publiser til Cloudflare
+        if: env.HAS_TOKEN == 'true'
+        run: npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Utan Cloudflare-hemmelegheiter
+        if: env.HAS_TOKEN != 'true'
+        run: echo "::notice::CLOUDFLARE_API_TOKEN og CLOUDFLARE_ACCOUNT_ID manglar, så ingenting vart publisert."

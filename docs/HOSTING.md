@@ -39,6 +39,29 @@ Oslo-buss køyrer som ein Cloudflare Worker utan tenar å vedlikehalde.
 
 Lokal prøve av heile oppsettet utan konto: `npm run build && npm run worker`, og opne `http://127.0.0.1:8787`.
 
+## Automatisk publisering
+
+`.github/workflows/deploy.yml` køyrer typesjekk, testar og bygg ved kvar push til `main` og publiserer så med `wrangler deploy`.
+Endringar som berre rører dokumentasjon blir hoppa over. Han treng to hemmelegheiter i repoet, og utan dei blir
+sjekkane køyrde utan å publisere:
+
+1. **`CLOUDFLARE_API_TOKEN`:** Lag eit token i Cloudflare (My Profile → API Tokens → Create Token → malen
+   «Edit Cloudflare Workers», avgrensa til kontoen din), og legg det inn utan å lime det inn i chat eller i filer:
+
+   ```bash
+   gh secret set CLOUDFLARE_API_TOKEN
+   ```
+
+   Du blir beden om verdien i terminalen.
+2. **`CLOUDFLARE_ACCOUNT_ID`:** Kontonummeret (står under Workers & Pages i dashbordet eller i `npx wrangler whoami`):
+
+   ```bash
+   gh secret set CLOUDFLARE_ACCOUNT_ID
+   ```
+
+Test med Actions → Publiser → Run workflow. Eit token som blir lekka kan publisere kva som helst til kontoen din: lag det
+med så smale rettar som mogleg, og slett det i Cloudflare om du er i tvil.
+
 ## Kostnad og planval
 
 Dette er eit grovt anslag frå prisane til Cloudflare (sjekk [prisane](https://developers.cloudflare.com/durable-objects/platform/pricing/) før du lanserer):
