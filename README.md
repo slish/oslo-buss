@@ -24,10 +24,10 @@ npm test
   held bussane i gong mellom svara (kvart 15. sekund) og trekker dei mjukt mot sanninga når nytt svar kjem.
 - Relayen kallar aldri Entur frå nettlesaren, og held siste gode kopi i 5 minutt før han fell tilbake til rutetabellen.
 
-Sett `CLIENT_NAME` i `src/relay/buses.ts` til noko som identifiserer deg før du går live (Entur ber om `firma-applikasjon`).
+Entur ber alle klientar sende `ET-Client-Name` (`firma-applikasjon`). Namnet står i `src/shared/client.ts`.
 
 ## Kreditering
 
 Inneholder data under Norsk lisens for offentlige data (NLOD) tilgjengeliggjort av Entur AS
-([lisens](https://data.norge.no/nlod/en/2.0)). Dataene er filtrert og bearbeidet. Kart © OpenStreetMap-bidragsytarar.
+([lisens](https://data.norge.no/nlod/en/2.0)). Dataene er filtrert og bearbeidet.
 Fanprosjekt, ikkje tilknytt eller støtta av Ruter eller Entur. Sjå `NOTICE.md`.
