@@ -11,6 +11,7 @@ import { createInterface } from 'node:readline';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import yauzl from 'yauzl';
+import { CLIENT_NAME } from '../src/shared/client';
 import { parseGtfsTime } from '../src/shared/time';
 import { TRIP_PREFIX, type TimetableFile } from '../src/shared/timetable';
 
@@ -27,7 +28,7 @@ async function download(fresh: boolean): Promise<void> {
   mkdirSync('data-cache', { recursive: true });
   if (!fresh && existsSync(CACHE) && Date.now() - statSync(CACHE).mtimeMs < 12 * 3_600_000) return;
   console.log('Downloading', GTFS_URL);
-  const response = await fetch(GTFS_URL, { headers: { 'ET-Client-Name': 'fanprosjekt-oslo-buss' } });
+  const response = await fetch(GTFS_URL, { headers: { 'ET-Client-Name': CLIENT_NAME } });
   if (!response.ok || !response.body) throw new Error(`Download failed: ${response.status}`);
   await pipeline(Readable.fromWeb(response.body as never), createWriteStream(CACHE));
 }

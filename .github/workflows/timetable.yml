@@ -1,0 +1,47 @@
+name: Tidstabell
+
+# Bygger public/data/timetable.json frå Entur sin GTFS for Ruter kvart døgn, sjekkar han, og legg han på grenen `data`.
+# Entur lagar ny GTFS-fil ved midnatt (UTC); 03:30 UTC gir god margin. Grenen `data` er éi enkelt commit som blir
+# skriven over kvar gong, så historikken veks ikkje. Relayen les fila derifrå (eller frå artefakten).
+on:
+  schedule:
+    - cron: '30 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: timetable
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: npm
+      - run: npm ci
+      - name: Bygg tidstabellen
+        run: npm run timetable -- --fresh
+      - name: Sjekk at han er fornuftig
+        run: npm run check-timetable
+      - uses: actions/upload-artifact@v7
+        with:
+          name: timetable
+          path: public/data/timetable.json
+          retention-days: 7
+      - name: Publiser til grenen data
+        run: |
+          cp public/data/timetable.json "$RUNNER_TEMP/timetable.json"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan data
+          git rm -rf . --quiet
+          cp "$RUNNER_TEMP/timetable.json" timetable.json
+          git add timetable.json
+          git commit --quiet -m "Tidstabell $(date -u +%F)"
+          git push --force origin data

@@ -3,13 +3,12 @@
 // Players never call Entur. The relay asks once per TTL for everyone, shares one fetch between concurrent requests,
 // and keeps its last good answer for a while if Entur fails. Nothing here needs Node: it runs in a Worker too.
 
+import { CLIENT_NAME } from '../shared/client';
 import { parseTripUpdates, type TripUpdate } from '../shared/protobuf';
 import { busAt, type Bus } from '../shared/position';
 import type { Timetable } from '../shared/timetable';
 
 export const TRIP_UPDATES = 'https://api.entur.io/realtime/v1/gtfs-rt/trip-updates';
-/** Entur asks every client to say who it is: "company-application". */
-export const CLIENT_NAME = 'fanprosjekt-oslo-buss';
 
 /** The buses on the road at `nowMs` for the timetable's lines. Pure: takes the updates, fetches nothing. */
 export function computeBuses(tt: Timetable, updates: Map<string, TripUpdate>, nowMs: number): Bus[] {
