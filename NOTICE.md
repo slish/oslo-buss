@@ -11,6 +11,5 @@
 Inneholder data under Norsk lisens for offentlige data (NLOD) tilgjengeliggjort av Entur AS.
 Lisens: https://data.norge.no/nlod/en/2.0
 Dataene er filtrert og bearbeidet: busposisjonar er berekna frå rutetabell og sanntidsforseinkingar.
-Kart: © OpenStreetMap-bidragsytarar (ODbL).
 
 Fanprosjekt. Ikkje tilknytt eller støtta av Ruter eller Entur.
