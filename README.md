@@ -1,6 +1,8 @@
 # oslo-buss
 
 Fanprosjekt: Oslo-busser som lyspunkt på eit kart, med sanntid frå Entur. Fase 1: datapipeline og relay. Fase 2: 3D-kart med bussar som lyspunkt. Fase 3: vegar og bygg frå OpenStreetMap. Fase 4: hosting på Cloudflare (`docs/HOSTING.md`).
+**Live:** https://oslo-buss.oslo-buss.workers.dev
+
 Linjer til å byrje med: **20** (Skøyen – Galgeberg), **31** (Snarøya – Grorud) og **63** (Grorud T – Romsås ring).
 
 ```bash

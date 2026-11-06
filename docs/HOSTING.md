@@ -15,7 +15,8 @@ Oslo-buss køyrer som ein Cloudflare Worker utan tenar å vedlikehalde.
 - **Tidstabellen** hentar objektet frå `TIMETABLE_URL` (`wrangler.jsonc`, grenen `data`), les han på nytt kvar sjette time, og
   held siste gode kopi om GitHub ikkje svarar. Nettlesaren får han frå `/data/timetable.json`, slik at han alltid er den same
   som relayen bruker.
-- **Kartfila** (`public/data/map.json`) er sjekka inn og følgjer med bygget som ei vanleg fil.
+- **Kartfila** (`public/data/map.json`) er sjekka inn og følgjer med bygget som ei vanleg fil. `public/.assetsignore` held
+  ein lokal `timetable.json` ute av opplastinga: Worker-en svarar på den stien.
 
 ## Første gong
 
@@ -31,7 +32,8 @@ Oslo-buss køyrer som ein Cloudflare Worker utan tenar å vedlikehalde.
    npm run deploy
    ```
 
-   Wrangler skriv ut adressa, `https://oslo-buss.<konto>.workers.dev`.
+   Wrangler skriv ut adressa. Den første publiseringa gav `https://oslo-buss.oslo-buss.workers.dev`. Ei ny `workers.dev`-adresse kan
+   gi TLS-feil i nokre minutt før sertifikatet er klart.
 
 3. Sjekk at det lever: opne adressa, eller `curl https://oslo-buss.<konto>.workers.dev/feeds/buses`.
 
