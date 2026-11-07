@@ -10,10 +10,12 @@ import {
 import { decodeTile, TILE_SIZE, tileName, type Tile, type XY } from '../shared/tiles';
 import { extrudeBlocks, type Block } from './basemap';
 import { upsample2 } from '../shared/terrain';
-import { rideColor } from './terrainstyle';
+import { rideColor, ASPHALT, GRAVEL, noise } from './terrainstyle';
 
 const BASE = '/kartverket-tiles/';
 const FINE = '/kartverket-tiles-fine/'; // terrain-only tiles at 10 m, fetched near the bus when riding (see build-fine-terrain.ts)
+/** Typical widths in meters by road class (motorway ... residential, path, rail): the map has only the centre line. 0: no asphalt. */
+const ROAD_WIDTH = [12, 8, 7, 6, 5, 2.4, 0];
 const FINE_RADIUS = 600; // meters from the bus: tiles within this get the fine terrain
 const FINE_KEEP = 1500; // ... and keep it until farther than this
 /** Colours of the land cover classes (sea, water, farmland, marsh, forest, built, park): dim, the buses are the light. */
@@ -39,6 +41,8 @@ interface Loaded {
   /** The fine terrain (10 m, smoothed to 5 m), once it is there: heightAt reads it. */
   fine?: { n: number; step: number; heights: Float32Array };
   fineMesh?: Mesh;
+  /** Asphalt laid on the fine terrain: while it is there the thin road lines of the tile are hidden. */
+  asphalt?: Mesh;
   fineState?: 'loading' | 'ready';
 }
 
@@ -110,6 +114,13 @@ export class KartverketMap {
       l.meshes.splice(l.meshes.indexOf(l.fineMesh), 1);
       l.fineMesh = undefined;
     }
+    if (l.asphalt) {
+      l.group.remove(l.asphalt);
+      l.asphalt.geometry.dispose();
+      l.meshes.splice(l.meshes.indexOf(l.asphalt), 1);
+      l.asphalt = undefined;
+      this.syncRoadLines(l);
+    }
     if (l.fine) { l.fine = undefined; this.version++; }
     l.fineState = undefined;
     if (l.terrainMesh) l.terrainMesh.visible = true;
@@ -141,6 +152,14 @@ export class KartverketMap {
     l.fineMesh = mesh;
     if (l.terrainMesh) l.terrainMesh.visible = false;
     this.version++;
+    const asphalt = this.asphaltMesh(l.tile);
+    if (asphalt) { l.group.add(asphalt); l.meshes.push(asphalt); l.asphalt = asphalt; }
+    this.syncRoadLines(l);
+  }
+
+  /** The thin lines of the roads show only where there is no asphalt. */
+  private syncRoadLines(l: Loaded): void {
+    for (const o of l.meshes) if (o.userData.road) o.visible = !l.asphalt;
   }
 
   /** Call every frame: it decides by itself when to fetch, build and release. */
@@ -258,6 +277,7 @@ export class KartverketMap {
     if (b) detail.push(b);
     for (const o of detail) { l.group.add(o); l.meshes.push(o); }
     l.detail = detail;
+    this.syncRoadLines(l);
   }
 
   /** Land cover as flat triangles, drawn first and in class order without depth, so that nothing fights. */
@@ -296,6 +316,52 @@ export class KartverketMap {
     return out;
   }
 
+  /**
+   * The roads of a tile as ribbons of asphalt laid on the terrain: each centre line gets the width of its class, a point every
+   * few meters with the ground height under both edges, and a hair of lift so it does not fight with the ground.
+   */
+  private asphaltMesh(tile: Tile): Mesh | undefined {
+    const pos: number[] = [], col: number[] = [], idx: number[] = [];
+    const color = new Color();
+    const STEP = 4, LIFT = 0.12;
+    for (const r of tile.roads) {
+      const width = ROAD_WIDTH[r.cls] ?? 0;
+      if (width <= 0 || r.points.length < 2) continue;
+      // Points along the line, no farther apart than STEP, so that the ribbon follows the terrain.
+      const pts: XY[] = [r.points[0]];
+      for (let i = 1; i < r.points.length; i++) {
+        const p = r.points[i - 1], q = r.points[i], len = Math.hypot(q[0] - p[0], q[1] - p[1]);
+        const parts = Math.max(1, Math.ceil(len / STEP));
+        for (let k = 1; k <= parts; k++) pts.push([p[0] + ((q[0] - p[0]) * k) / parts, p[1] + ((q[1] - p[1]) * k) / parts]);
+      }
+      const base = pos.length / 3;
+      const half = width / 2, paint = r.cls === 5 ? GRAVEL : ASPHALT;
+      for (let i = 0; i < pts.length; i++) {
+        const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)];
+        let tx = b[0] - a[0], tz = b[1] - a[1];
+        const len = Math.hypot(tx, tz) || 1;
+        tx /= len; tz /= len;
+        const nx = -tz, nz = tx, [x, z] = pts[i];
+        const shade = 0.88 + 0.24 * noise(x / 9, z / 9);
+        color.copy(paint).multiplyScalar(shade);
+        for (const side of [1, -1]) {
+          const ex = x + nx * half * side, ez = z + nz * half * side;
+          pos.push(ex, this.heightAt(ex, ez) + LIFT, ez);
+          col.push(color.r, color.g, color.b);
+        }
+        if (i > 0) { const k = base + i * 2; idx.push(k - 2, k, k - 1, k - 1, k, k + 1); }
+      }
+    }
+    if (!idx.length) return undefined;
+    const geometry = new BufferGeometry();
+    geometry.setAttribute('position', new BufferAttribute(new Float32Array(pos), 3));
+    geometry.setAttribute('color', new BufferAttribute(new Float32Array(col), 3));
+    geometry.setIndex(new BufferAttribute(new Uint32Array(idx), 1));
+    const mesh = new Mesh(geometry, new MeshBasicMaterial({ vertexColors: true, side: DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+    mesh.frustumCulled = true;
+    return mesh;
+  }
+
   private roadMeshes(tile: Tile, small: boolean): Object3D[] {
     const per: number[][] = ROAD_STYLE.map(() => []);
     const lift = this.options.terrain ? 1 : -1;
@@ -315,6 +381,7 @@ export class KartverketMap {
       const geometry = new BufferGeometry();
       geometry.setAttribute('position', new BufferAttribute(new Float32Array(positions), 3));
       const lines = new LineSegments(geometry, this.roadMaterials[cls]);
+      lines.userData.road = true;
       meshes.push(lines);
     });
     return meshes;

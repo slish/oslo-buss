@@ -7,6 +7,8 @@ import { Color } from 'three';
 export const RIDE_COLORS = ['#16315c', '#1d4572', '#4a5a2c', '#3b5446', '#1f4a2b', '#4a4d58', '#3f7a3f'].map((c) => new Color(c));
 export const RIDE_GROUND = new Color('#33392c');
 const ROCK = new Color('#7a7873');
+export const ASPHALT = new Color('#2a2c33');
+export const GRAVEL = new Color('#4b4638');
 
 function hash(i: number, j: number): number {
   let h = Math.imul(i, 374761393) ^ Math.imul(j, 668265263);
