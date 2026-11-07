@@ -35,8 +35,15 @@ export function buildRoads(map: MapFile): Group {
 /** Light from the south-west: walls turned toward it are brighter. Directions are in the scene's x (east) and z (south). */
 const SUN = { x: -0.55, z: 0.83 };
 
+/** A building to extrude: an open ring in scene meters, a height, and the height of the ground it stands on. */
+export interface Block { ring: [number, number][]; height: number; base?: number; /** A convex quad: the roof needs no triangulation. */ quad?: boolean }
+
 /** One mesh with every building: walls shaded by the way they face, roofs lighter the taller the building is. */
 export function buildBuildings(map: MapFile): Mesh {
+  return extrudeBlocks(map.buildings.map((b) => ({ height: b[0] / 10, ring: decodePoints(b, 1) })));
+}
+
+export function extrudeBlocks(blocks: Block[]): Mesh {
   const positions: number[] = [];
   const colors: number[] = [];
   const indices: number[] = [];
@@ -48,9 +55,8 @@ export function buildBuildings(map: MapFile): Mesh {
     return positions.length / 3 - 1;
   };
 
-  for (const b of map.buildings) {
-    const height = b[0] / 10;
-    const ring = decodePoints(b, 1);
+  for (const blk of blocks) {
+    const ring = blk.ring, y0 = blk.base ?? 0, y1 = y0 + blk.height, height = blk.height;
     const n = ring.length;
     if (n < 3) continue;
     // Signed area tells which way the ring runs, so that "outward" is known for every wall.
@@ -66,18 +72,17 @@ export function buildBuildings(map: MapFile): Mesh {
       const nx = (sign * dz) / len, nz = (-sign * dx) / len;
       const shade = 0.5 + 0.5 * Math.max(0, nx * SUN.x + nz * SUN.z) + 0.1 * tall;
       tmp.copy(base);
-      const a = vertex(p[0], 0, p[1], tmp, shade * 0.55);
-      const b2 = vertex(q[0], 0, q[1], tmp, shade * 0.55);
-      const c = vertex(q[0], height, q[1], tmp, shade);
-      const d = vertex(p[0], height, p[1], tmp, shade);
+      const a = vertex(p[0], y0, p[1], tmp, shade * 0.55);
+      const b2 = vertex(q[0], y0, q[1], tmp, shade * 0.55);
+      const c = vertex(q[0], y1, q[1], tmp, shade);
+      const d = vertex(p[0], y1, p[1], tmp, shade);
       indices.push(a, b2, c, a, c, d);
     }
 
-    const contour = ring.map((p) => new Vector2(p[0], p[1]));
-    const triangles = ShapeUtils.triangulateShape(contour, []);
+    const triangles = blk.quad ? [[0, 1, 2], [0, 2, 3]] : ShapeUtils.triangulateShape(ring.map((p) => new Vector2(p[0], p[1])), []);
     tmp.copy(roofBase);
     const first = positions.length / 3;
-    for (const p of ring) vertex(p[0], height, p[1], tmp, 0.9 + 0.5 * tall);
+    for (const p of ring) vertex(p[0], y1, p[1], tmp, 0.9 + 0.5 * tall);
     for (const t of triangles) indices.push(first + t[0], first + t[1], first + t[2]);
   }
 

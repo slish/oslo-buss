@@ -1,9 +1,11 @@
 import { Color, GridHelper, Line, LineBasicMaterial, BufferGeometry, Float32BufferAttribute, PerspectiveCamera, Scene, Vector3, WebGLRenderer, AdditiveBlending } from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { MapCamera } from './mapcamera';
 import type { MapFile } from '../shared/map';
 import { buildBuildings, buildRoads } from './basemap';
 import { Glow } from './glow';
+import { BusModels, BUS_LENGTH, modelness } from './busmodel';
 import { BusStore, type Track } from './store';
+import type { KartverketMap } from './kartverket';
 import { colorOf, toX, toZ } from './world';
 
 const BUS_SIZE = 420; // meters across on the ground
@@ -31,6 +33,7 @@ try {
 const file = store.timetable.file;
 
 // ---- the roads of the lines and their stops ----
+const shapeLines: { position: Float32BufferAttribute }[] = [];
 const lineOfShape = new Map<string, string>();
 for (const p of file.patterns) lineOfShape.set(p.shape, file.lines[p.line].name);
 
@@ -43,7 +46,9 @@ for (const [id, shape] of store.timetable.shapes) {
     minX = Math.min(minX, x); maxX = Math.max(maxX, x); minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z);
   }
   const geometry = new BufferGeometry();
-  geometry.setAttribute('position', new Float32BufferAttribute(points, 3));
+  const position = new Float32BufferAttribute(points, 3);
+  geometry.setAttribute('position', position);
+  shapeLines.push({ position });
   const material = new LineBasicMaterial({ color: colorOf(lineOfShape.get(id) ?? ''), transparent: true, opacity: 0.5, blending: AdditiveBlending, depthWrite: false, depthTest: false });
   const road = new Line(geometry, material);
   road.renderOrder = 1; // after the map, whatever the buildings in between: the lights show through
@@ -56,17 +61,42 @@ scene.add(grid);
 
 const stops = new Glow(Object.keys(file.stops).length, 2);
 const stopColor = new Color('#7d8aa3');
-for (const [, lat, lon] of Object.values(file.stops)) stops.add(toX(lon), 0, toZ(lat), stopColor, STOP_SIZE, 0.55);
-stops.commit();
+const stopXZ = Object.values(file.stops).map(([, lat, lon]) => [toX(lon), toZ(lat)] as const);
+const placeStops = (height: (x: number, z: number) => number) => {
+  stops.clear();
+  for (const [x, z] of stopXZ) stops.add(x, height(x, z), z, stopColor, STOP_SIZE, 0.55);
+  stops.commit();
+};
+placeStops(() => 0);
 stops.points.renderOrder = 2;
 scene.add(stops.points);
 
 const buses = new Glow(512, 9);
 buses.points.renderOrder = 3;
 scene.add(buses.points);
+const busModels = new BusModels(scene);
 
 // ---- the map under it all: roads and buildings from OpenStreetMap, loaded once the lights are on ----
-void (async () => {
+// ?kart=kartverket draws Kartverket's tiles instead (dev server only, see docs/KARTVERKET.md); &terreng=1 follows the terrain.
+const params = new URLSearchParams(location.search);
+let kart: KartverketMap | undefined;
+if (params.get('kart') === 'kartverket') {
+  void (async () => {
+    try {
+      const { KartverketMap } = await import('./kartverket');
+      const k = new KartverketMap({ terrain: params.get('terreng') === '1' });
+      await k.start();
+      scene.add(k.group);
+      scene.remove(grid);
+      kart = k;
+      if (import.meta.env.DEV) Object.assign((window as unknown as { __oslo: object }).__oslo, { kart: k });
+    } catch (e) {
+      console.warn('Kunne ikkje laste Kartverket-fliser', e);
+      statusEl.textContent = e instanceof Error ? e.message : String(e);
+      statusEl.classList.add('warn');
+    }
+  })();
+} else void (async () => {
   try {
     const response = await fetch('/data/map.json');
     if (!response.ok) return; // the map is optional: without it the lines and buses still show
@@ -81,16 +111,27 @@ void (async () => {
 // ---- camera ----
 const center = new Vector3((minX + maxX) / 2, 0, (minZ + maxZ) / 2);
 const span = Math.max(maxX - minX, maxZ - minZ);
-camera.position.set(center.x, span * 0.95, center.z + span * 0.75);
-const controls = new OrbitControls(camera, canvas);
-controls.target.copy(center);
-controls.enableDamping = true;
-controls.maxPolarAngle = Math.PI * 0.46;
-controls.minDistance = 600;
-controls.maxDistance = 120_000;
-controls.update();
+const controls = new MapCamera(camera, canvas, {
+  x: center.x, z: center.z, distance: Math.hypot(span * 0.95, span * 0.75), yaw: 0, elevation: Math.atan2(span * 0.95, span * 0.75),
+});
+controls.setGround((x, z) => kart?.heightAt(x, z) ?? 0);
+controls.update(1);
 // For looking at the scene from the console while developing: window.__oslo.camera, .controls, .toX, .toZ.
-if (import.meta.env.DEV) Object.assign(window, { __oslo: { camera, controls, toX, toZ } });
+if (import.meta.env.DEV) Object.assign(window, { __oslo: { camera, controls, toX, toZ, store } });
+
+/** Keeps the camera and its target above the ground (the terrain with ?terreng=1), and near/far in proportion to the distance, so that nothing is clipped close up. */
+let nearNow = 0, farNow = 0;
+let stopShrink = 1; // the markers of the stops are 70 m discs: close up they shrink with the distance, so they do not cover the street
+function keepAbove(): void {
+  const dist = controls.distance;
+  const shrink = Math.min(1, Math.max(0.06, dist / 2500));
+  if (Math.abs(shrink - stopShrink) > 0.01) { stopShrink = shrink; resize(); }
+  const near = Math.min(100, Math.max(0.5, dist * 0.01)), far = Math.min(400_000, Math.max(20_000, dist * 8));
+  if (Math.abs(near / nearNow - 1) > 0.03 || Math.abs(far / farNow - 1) > 0.03) {
+    nearNow = camera.near = near; farNow = camera.far = far;
+    camera.updateProjectionMatrix();
+  }
+}
 
 function resize(): void {
   const ratio = Math.min(window.devicePixelRatio, 2);
@@ -100,7 +141,7 @@ function resize(): void {
   camera.updateProjectionMatrix();
   const pixelsPerMeter = (window.innerHeight * ratio) / (2 * Math.tan((FOV * Math.PI) / 360));
   buses.setScale(pixelsPerMeter, ratio, 9);
-  stops.setScale(pixelsPerMeter, ratio, 2);
+  stops.setScale(pixelsPerMeter * stopShrink, ratio, 2);
 }
 window.addEventListener('resize', resize);
 resize();
@@ -122,7 +163,7 @@ function busAt(clientX: number, clientY: number): Track | null {
   let best: Track | null = null, bestD = 18; // pixels
   for (const t of store.tracks.values()) {
     if (t.leaving) continue;
-    screen.set(t.x, 0, t.z).project(camera);
+    screen.set(t.x, (kart?.heightAt(t.x, t.z) ?? 0) + 3, t.z).project(camera);
     if (screen.z > 1) continue;
     const d = Math.hypot((screen.x * 0.5 + 0.5) * window.innerWidth - clientX, (-screen.y * 0.5 + 0.5) * window.innerHeight - clientY);
     if (d < bestD) { best = t; bestD = d; }
@@ -179,18 +220,47 @@ store.start();
 // ---- the loop ----
 const tmp = new Color();
 let last = performance.now();
+let liftedAt = -1;
+/** With ?terreng=1 the lines of the buses follow the terrain too, as the tiles come in. */
+function liftLines(): void {
+  if (!kart || !kart.options.terrain || kart.version === liftedAt) return;
+  liftedAt = kart.version;
+  placeStops((x, z) => kart!.heightAt(x, z) + 3);
+  for (const { position } of shapeLines) {
+    for (let i = 0; i < position.count; i++) position.setY(i, kart.heightAt(position.getX(i), position.getZ(i)) + 3);
+    position.needsUpdate = true;
+  }
+}
 function frame(now: number): void {
   const dt = Math.min(0.25, (now - last) / 1000);
   last = now;
   store.tick(dt);
   buses.clear();
+  busModels.clear();
   for (const t of store.tracks.values()) {
     tmp.set(colorOf(t.bus.line));
     const chosen = t.bus.id === selected;
-    buses.add(t.x, 6, t.z, tmp, chosen ? BUS_SIZE * 1.8 : BUS_SIZE, t.alpha * (t.bus.live ? 1 : 0.5));
+    const ground = kart?.heightAt(t.x, t.z) ?? 0;
+    // Close to the camera the light gives way to the model of the bus, smoothly; the chosen bus keeps a small halo.
+    const m = modelness(Math.hypot(camera.position.x - t.x, camera.position.y - ground, camera.position.z - t.z));
+    const alpha = t.alpha * (t.bus.live ? 1 : 0.5);
+    const size = (chosen ? BUS_SIZE * 1.8 : BUS_SIZE) * (1 - 0.92 * m);
+    buses.add(t.x, 6 + ground, t.z, tmp, chosen ? Math.max(size, 30) : size, alpha * (1 - (chosen ? 0.7 : 0.85) * m));
+    if (m > 0) {
+      let pitch = 0;
+      if (kart?.options.terrain) {
+        const b = (t.bearing * Math.PI) / 180, hx = Math.sin(b) * BUS_LENGTH / 2, hz = -Math.cos(b) * BUS_LENGTH / 2;
+        pitch = Math.atan2(kart.heightAt(t.x + hx, t.z + hz) - kart.heightAt(t.x - hx, t.z - hz), BUS_LENGTH);
+      }
+      busModels.add(t.x, ground + 0.2, t.z, t.bearing, pitch, tmp, m * Math.max(0.2, t.alpha), chosen ? 1.5 : 0.9);
+    }
   }
+  busModels.commit();
   buses.commit();
-  controls.update();
+  controls.update(dt);
+  kart?.update(camera, controls.target, now);
+  liftLines();
+  keepAbove();
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
 }
