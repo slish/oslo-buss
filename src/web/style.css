@@ -29,3 +29,6 @@ footer a { color: #9db4dd; pointer-events: auto; }
 @media (max-width: 560px) { footer { font-size: 10px; } #info { bottom: 90px; right: 16px; max-width: none; } }
 #ride { margin-top: 10px; width: 100%; font: inherit; font-size: 13px; font-weight: 600; color: var(--ink); background: #1a2740; border: 1px solid #9db4dd; border-radius: 6px; padding: 6px 10px; cursor: pointer; }
 #ride:hover { background: #24365a; }
+#info .dep .time { color: var(--ink); font-variant-numeric: tabular-nums; }
+#info .dep .line { font-weight: 700; }
+#info .source { margin-top: 6px; font-size: 11px; }
