@@ -182,3 +182,16 @@ npm run dev                # opne http://localhost:5173/?kart=kartverket   (legg
 4. Pakk ut zip i `download.ts` så heile kjeda er eitt steg, og legg til tilhøyrande Action om fliser skal byggast automatisk.
 5. Dersom flisene skal publiserast: sjå tilrådinga om statiske filer ovanfor, og legg `?kart` bak ein ekte konfigurasjon, ikkje dev-mellomvaren.
 6. Søk Norge digitalt-avtale (eller vent på at Kartverket opnar FKB) om meir detaljerte bygg er ønskte.
+
+## Publisering av fliser
+
+Flisene er ein ferdig bygd artefakt: dei krev ca. 1 GB nedlasta Kartverket-data og tung OSM-henting, så dei blir ikkje bygde i CI. I staden ligg dei på grenen `tiles` (éin ny commit kvar gong, som `data`-grenen), og `deploy.yml` hentar dei til `public/kartverket-tiles/` før bygget. Utan grenen bygger sida likevel, men utan fliser.
+
+Etter at du har bygd nye fliser lokalt (`npm run kartverket:tiles`):
+
+```bash
+npm run kartverket:publish   # pushar data-cache/tiles til grenen tiles
+gh workflow run Publiser     # bygger og publiserer sida på nytt med dei nye flisene
+```
+
+Sida har to knappar, «Kartverket-kart» og «Terreng», som set flagga `?kart=kartverket` og `&terreng=1`. Standardkartet er framleis OSM.
