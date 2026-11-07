@@ -2,6 +2,7 @@
 
 import { BufferAttribute, BufferGeometry, Color, Group, LineBasicMaterial, LineSegments, Mesh, MeshBasicMaterial, ShapeUtils, Vector2 } from 'three';
 import { decodePoints, type MapFile } from '../shared/map';
+import { daylit, daylitLine } from './daylight';
 
 /** Colour and opacity of each road class, from the big roads to the small streets. */
 const ROAD_STYLE: { color: string; opacity: number }[] = [
@@ -25,7 +26,7 @@ export function buildRoads(map: MapFile): Group {
     if (!positions.length) return;
     const geometry = new BufferGeometry();
     geometry.setAttribute('position', new BufferAttribute(new Float32Array(positions), 3));
-    const lines = new LineSegments(geometry, new LineBasicMaterial({ color: ROAD_STYLE[cls].color, transparent: true, opacity: ROAD_STYLE[cls].opacity }));
+    const lines = new LineSegments(geometry, daylitLine(new LineBasicMaterial({ color: ROAD_STYLE[cls].color, transparent: true, opacity: ROAD_STYLE[cls].opacity })));
     lines.frustumCulled = false;
     group.add(lines);
   });
@@ -90,7 +91,7 @@ export function extrudeBlocks(blocks: Block[]): Mesh {
   geometry.setAttribute('position', new BufferAttribute(new Float32Array(positions), 3));
   geometry.setAttribute('color', new BufferAttribute(new Float32Array(colors), 3));
   geometry.setIndex(new BufferAttribute(positions.length / 3 > 65535 ? new Uint32Array(indices) : new Uint16Array(indices), 1));
-  const mesh = new Mesh(geometry, new MeshBasicMaterial({ vertexColors: true, side: 2 /* DoubleSide */ }));
+  const mesh = new Mesh(geometry, daylit(new MeshBasicMaterial({ vertexColors: true, side: 2 /* DoubleSide */ }), true));
   mesh.frustumCulled = false;
   return mesh;
 }

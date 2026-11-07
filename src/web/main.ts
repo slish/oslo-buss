@@ -8,6 +8,9 @@ import { BusStore, type Track } from './store';
 import type { KartverketMap } from './kartverket';
 import { colorOf, toX, toZ } from './world';
 import { linesAt, lineInfo, nextDepartures } from '../shared/departures';
+import { osloEpoch, osloTime } from '../shared/time';
+import { SkyDome } from './sky';
+import { applyLight, lightAt } from './daylight';
 
 const BUS_SIZE = 420; // meters across on the ground
 const STOP_SIZE = 70;
@@ -21,7 +24,9 @@ const infoEl = document.querySelector<HTMLElement>('#info')!;
 
 const renderer = new WebGLRenderer({ canvas, antialias: true });
 const scene = new Scene();
-scene.background = new Color('#05070d');
+renderer.setClearColor('#05070d'); // the sky is drawn over it
+const sky = new SkyDome();
+scene.add(sky.mesh);
 const camera = new PerspectiveCamera(FOV, 1, 50, 400_000);
 
 const store = new BusStore();
@@ -56,7 +61,7 @@ for (const [id, shape] of store.timetable.shapes) {
   geometry.setAttribute('position', position);
   shapeLines.push({ position });
   shapeIds.push(id);
-  const material = new LineBasicMaterial({ color: colorOf(lineOfShape.get(id) ?? ''), transparent: true, opacity: LINE_OPACITY, blending: AdditiveBlending, depthWrite: false, depthTest: false });
+  const material = new LineBasicMaterial({ color: colorOf(lineOfShape.get(id) ?? ''), transparent: true, opacity: LINE_OPACITY, blending: AdditiveBlending, depthWrite: false, depthTest: false, fog: false });
   const lineName = lineOfShape.get(id) ?? '';
   lineMaterials.set(lineName, [...(lineMaterials.get(lineName) ?? []), material]);
   const road = new Line(geometry, material);
@@ -131,6 +136,32 @@ if (useKart) {
     console.warn('Kunne ikkje laste kartet', e);
   }
 })();
+
+// ---- the hour ----
+// The sky follows the clock; ?tid=22:30 or the slider shows another hour of today. "No" lets it follow the clock again.
+let skyTime: number | null = null;
+const tidEl = document.querySelector<HTMLInputElement>('#tid')!;
+const tidText = document.querySelector<HTMLElement>('#tid-text')!;
+const tidNow = document.querySelector<HTMLButtonElement>('#tid-now')!;
+function setHour(minutes: number | null): void {
+  skyTime = minutes === null ? null : osloEpoch(osloTime(Date.now()).date, minutes * 60);
+  showHour();
+}
+function showHour(): void {
+  const t = osloTime(skyTime ?? Date.now());
+  const minutes = Math.floor(t.secs / 60);
+  if (skyTime === null) tidEl.value = String(minutes);
+  tidText.textContent = String(Math.floor(minutes / 60)).padStart(2, '0') + ':' + String(minutes % 60).padStart(2, '0');
+  tidNow.hidden = skyTime === null;
+}
+tidEl.addEventListener('input', () => setHour(Number(tidEl.value)));
+tidNow.addEventListener('click', () => setHour(null));
+{
+  const m = /^(\d{1,2}):(\d{2})$/.exec(new URLSearchParams(location.search).get('tid') ?? '');
+  if (m) { tidEl.value = String(Number(m[1]) * 60 + Number(m[2])); setHour(Number(tidEl.value)); } else showHour();
+}
+setInterval(() => { if (skyTime === null) showHour(); }, 30_000);
+const cloud = 0.25; // the weather is next: 0 clear, 1 overcast
 
 // ---- camera ----
 const center = new Vector3((minX + maxX) / 2, 0, (minZ + maxZ) / 2);
@@ -432,6 +463,11 @@ function frame(now: number): void {
   kart?.update(camera, controls.target, now);
   liftLines();
   keepAbove();
+  const light = lightAt(skyTime ?? Date.now(), cloud);
+  applyLight(light);
+  busModels.setLight(light.ambient, light.sunLight, light.sunPower, light.sunDir);
+  camera.updateMatrixWorld();
+  sky.update(camera, light, cloud, now / 1000);
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
 }
