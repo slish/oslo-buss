@@ -204,7 +204,8 @@ function choose(what: { bus?: string; stop?: string; line?: string }): void {
 let riding: string | null = null; // the id of the bus we sit on
 function ride(id: string | null): void {
   riding = id;
-  for (const road of roads) road.visible = !id; // from the seat the colored lines are only noise
+  for (const road of roads) road.visible = !id; // from the seat the colored lines and the glowing stops are only noise
+  stops.points.visible = mark.points.visible = !id;
   if (!id) controls.follow(null);
   showInfo();
 }
