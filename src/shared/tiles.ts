@@ -17,15 +17,17 @@ export const ROAD_CLASSES = ['motorway', 'primary', 'secondary', 'tertiary', 're
 export interface TileBuilding {
   /** Height in decimeters. */
   height: number;
-  /** 0 = a guess from the building type, 1 = estimated from the surface model minus the terrain model. */
-  heightSource: 0 | 1;
+  /** 0 = a guess from the building type, 1 = estimated from the surface model minus the terrain model, 2 = from OpenStreetMap's height or building:levels tag. */
+  heightSource: 0 | 1 | 2;
+  /** True for an outline from OpenStreetMap (ODbL), absent for N50 (Kartverket). */
+  osm?: boolean;
   /** Building type code (NS 3457) from the national building register, 0 if unknown. */
   type: number;
   /** The outline in meters; the ring is open: the last point is not the first. */
   ring: XY[];
 }
 /** A building known only as a point in the register (no outline). */
-export interface TilePoint { x: number; z: number; type: number; height: number; heightSource: 0 | 1 }
+export interface TilePoint { x: number; z: number; type: number; height: number; heightSource: 0 | 1 | 2 }
 export interface TileRoad { cls: number; points: XY[] }
 /** Rings are outer rings and holes together; fill with the even-odd rule. */
 export interface TileArea { cls: number; rings: XY[][] }
@@ -48,7 +50,7 @@ export interface Tile {
 }
 
 const MAGIC = [0x4f, 0x42, 0x54, 0x31]; // "OBT1"
-const SEC_BUILDINGS = 1, SEC_POINTS = 2, SEC_ROADS = 3, SEC_AREAS = 4, SEC_TERRAIN = 5;
+const SEC_BUILDINGS = 1, SEC_POINTS = 2, SEC_ROADS = 3, SEC_AREAS = 4, SEC_TERRAIN = 5, SEC_OSM_BUILDINGS = 6; // 6: like 1, for the outlines from OpenStreetMap, so that the two licences stay apart
 
 export const tileOf = (x: number, z: number): [number, number] => [Math.floor(x / TILE_SIZE), Math.floor(z / TILE_SIZE)];
 export const tileName = (ix: number, iz: number) => `${ix}_${iz}.bin`;
@@ -130,10 +132,13 @@ export function encodeTile(tile: Tile): Uint8Array {
     fill(s);
     w.u8(id); w.uvar(s.length); w.bytes(s.done());
   };
-  if (tile.buildings.length) section(SEC_BUILDINGS, (s) => {
-    s.uvar(tile.buildings.length);
-    for (const b of tile.buildings) { s.uvar(b.height); s.u8(b.heightSource); s.uvar(b.type); writePoints(s, b.ring, ox, oz); }
-  });
+  for (const [id, osm] of [[SEC_BUILDINGS, false], [SEC_OSM_BUILDINGS, true]] as const) {
+    const list = tile.buildings.filter((b) => Boolean(b.osm) === osm);
+    if (list.length) section(id, (s) => {
+      s.uvar(list.length);
+      for (const b of list) { s.uvar(b.height); s.u8(b.heightSource); s.uvar(b.type); writePoints(s, b.ring, ox, oz); }
+    });
+  }
   if (tile.points.length) section(SEC_POINTS, (s) => {
     s.uvar(tile.points.length);
     let px = 0, pz = 0;
@@ -170,11 +175,13 @@ export function decodeTile(data: Uint8Array): Tile {
     const id = r.u8();
     const s = new Reader(r.slice(r.uvar()));
     switch (id) {
-      case SEC_BUILDINGS: {
+      case SEC_BUILDINGS: case SEC_OSM_BUILDINGS: {
         const n = s.uvar();
         for (let i = 0; i < n; i++) {
-          const height = s.uvar(), heightSource = s.u8() as 0 | 1, type = s.uvar();
-          tile.buildings.push({ height, heightSource, type, ring: readPoints(s, ox, oz) });
+          const height = s.uvar(), heightSource = s.u8() as 0 | 1 | 2, type = s.uvar();
+          const b: TileBuilding = { height, heightSource, type, ring: readPoints(s, ox, oz) };
+          if (id === SEC_OSM_BUILDINGS) b.osm = true;
+          tile.buildings.push(b);
         }
         break;
       }
@@ -183,7 +190,7 @@ export function decodeTile(data: Uint8Array): Tile {
         let x = 0, z = 0;
         for (let i = 0; i < n; i++) {
           x += s.svar(); z += s.svar();
-          tile.points.push({ x: ox + x / 10, z: oz + z / 10, type: s.uvar(), height: s.uvar(), heightSource: s.u8() as 0 | 1 });
+          tile.points.push({ x: ox + x / 10, z: oz + z / 10, type: s.uvar(), height: s.uvar(), heightSource: s.u8() as 0 | 1 | 2 });
         }
         break;
       }

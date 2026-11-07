@@ -109,3 +109,14 @@ describe('GeoTIFF reading', () => {
     expect(f.bilinear(115, 217)).toBeCloseTo(25, 5); // the middle of the four cell centres
   });
 });
+
+describe('OpenStreetMap heights', () => {
+  it('reads height and levels tags, and nothing where there are none', async () => {
+    const { osmTagHeight } = await import('../scripts/kartverket/build-tiles');
+    expect(osmTagHeight({ height: '12.5 m' })).toBe(12.5);
+    expect(osmTagHeight({ height: '9,5' })).toBe(9.5);
+    expect(osmTagHeight({ 'building:levels': '4' })).toBeCloseTo(13.4);
+    expect(osmTagHeight({ building: 'yes' })).toBeUndefined();
+    expect(osmTagHeight({ height: 'tall' })).toBeUndefined();
+  });
+});

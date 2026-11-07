@@ -41,6 +41,18 @@ describe('tile format', () => {
     expect(back.areas[0].rings.map((r) => r.length)).toEqual([4, 3]);
   });
 
+  it('keeps outlines from OpenStreetMap apart from N50 and remembers where their height came from', () => {
+    const t = sample();
+    t.buildings.push({ height: 90, heightSource: 2, type: 0, osm: true, ring: [[t.ix * TILE_SIZE + 5, t.iz * TILE_SIZE + 5], [t.ix * TILE_SIZE + 25, t.iz * TILE_SIZE + 5], [t.ix * TILE_SIZE + 25, t.iz * TILE_SIZE + 20]] });
+    const back = decodeTile(encodeTile(t));
+    expect(back.buildings).toHaveLength(2);
+    const osm = back.buildings.filter((b) => b.osm);
+    expect(osm).toHaveLength(1);
+    expect(osm[0]).toMatchObject({ height: 90, heightSource: 2 });
+    expect(osm[0].ring).toHaveLength(3);
+    expect(back.buildings.find((b) => !b.osm)!.heightSource).toBe(1);
+  });
+
   it('round-trips terrain exactly, including negative heights', () => {
     const t = sample();
     const back = decodeTile(encodeTile(t));

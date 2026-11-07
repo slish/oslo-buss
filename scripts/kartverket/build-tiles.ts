@@ -5,14 +5,16 @@ import { join } from 'node:path';
 import { brotliCompressSync, gzipSync } from 'node:zlib';
 import proj4 from 'proj4';
 import { simplifyXY } from '../../src/shared/geom';
+import { buildingHeight } from '../../src/shared/map';
 import { AREA_CLASSES, ROAD_CLASSES, TILE_SIZE, encodeTile, tileName, type Tile, type TileIndex, type XY } from '../../src/shared/tiles';
 import { toX, toZ, ORIGIN } from '../../src/web/world';
 import { clipLine, clipRing, pointInRing, ringArea, type Rect } from './clip';
 import { HeightField, readFloatTiff } from './geotiff';
 import { field, lineStrings, members, surfaceRings } from './gml';
+import { cell, cellsOfTiles } from './osm';
 import { DOM_RES, DTM_BBOX, DTM_BLOCK, DTM_RES } from './download';
 
-export const CREDIT = 'Kartdata © Kartverket (CC BY 4.0)';
+export const CREDIT = 'Kartdata © Kartverket (CC BY 4.0), bygg òg © OpenStreetMap-bidragsytarar (ODbL)';
 
 const args = process.argv.slice(2);
 const argOf = (n: string) => { const i = args.indexOf(n); return i >= 0 ? args[i + 1] : undefined; };
@@ -231,13 +233,105 @@ function addTerrain() {
   }
 }
 
+// --- OpenStreetMap outlines: the main source of buildings where they exist; N50 outlines and register points stay where OSM has none ---
+const ptSegDist = (px: number, pz: number, a: XY, b: XY) => {
+  const dx = b[0] - a[0], dz = b[1] - a[1], l2 = dx * dx + dz * dz;
+  const t = l2 ? Math.max(0, Math.min(1, ((px - a[0]) * dx + (pz - a[1]) * dz) / l2)) : 0;
+  return Math.hypot(px - a[0] - t * dx, pz - a[1] - t * dz);
+};
+const centroidOf = (r: XY[]): XY => [r.reduce((a, p) => a + p[0], 0) / r.length, r.reduce((a, p) => a + p[1], 0) / r.length];
+
+/** A grid over rings (scene meters) to ask whether a point is inside one, or within `near` meters of its edge. */
+class RingGrid {
+  private readonly cells = new Map<string, XY[][]>();
+  constructor(rings: XY[][], private readonly cellSize = 100) {
+    for (const r of rings) {
+      const xs = r.map((p) => p[0]), zs = r.map((p) => p[1]);
+      for (let i = Math.floor((Math.min(...xs) - 5) / cellSize); i <= Math.floor((Math.max(...xs) + 5) / cellSize); i++)
+        for (let j = Math.floor((Math.min(...zs) - 5) / cellSize); j <= Math.floor((Math.max(...zs) + 5) / cellSize); j++) {
+          const k = `${i},${j}`;
+          (this.cells.get(k) ?? this.cells.set(k, []).get(k)!).push(r);
+        }
+    }
+  }
+  covers(x: number, z: number, near = 0): boolean {
+    for (const r of this.cells.get(`${Math.floor(x / this.cellSize)},${Math.floor(z / this.cellSize)}`) ?? []) {
+      if (pointInRing(x, z, r)) return true;
+      if (near > 0) for (let i = 0; i < r.length; i++) if (ptSegDist(x, z, r[i], r[(i + 1) % r.length]) <= near) return true;
+    }
+    return false;
+  }
+}
+
+/** Parses an OSM height tag ("12", "12.5 m"); undefined if there is none that makes sense. */
+export function osmTagHeight(tags: Record<string, string>): number | undefined {
+  const h = parseFloat((tags.height ?? '').replace(',', '.'));
+  if (Number.isFinite(h) && h > 0) return Math.min(h, 250);
+  const levels = parseFloat(tags['building:levels'] ?? '');
+  if (Number.isFinite(levels) && levels > 0) return buildingHeight({ 'building:levels': String(levels) });
+  return undefined;
+}
+
+async function mergeOsm(st: Stats) {
+  const cells = cellsOfTiles([...tiles.values()].map((t) => tileName(t.ix, t.iz)));
+  const seen = new Set<number>();
+  const found: { ring: XY[]; height: number; heightSource: 0 | 1 | 2 }[] = [];
+  for (const c of cells) {
+    for (const w of await cell(c.i, c.j, false)) {
+      if (seen.has(w.id)) continue;
+      seen.add(w.id);
+      let pts: XY[] = w.geometry.map((p) => [toX(p.lon), toZ(p.lat)]);
+      if (pts.length > 3 && pts[0][0] === pts[pts.length - 1][0] && pts[0][1] === pts[pts.length - 1][1]) pts = pts.slice(0, -1);
+      else if (pts.length < 3) continue;
+      else if (w.geometry[0].lat !== w.geometry[w.geometry.length - 1].lat || w.geometry[0].lon !== w.geometry[w.geometry.length - 1].lon) continue; // an open way is no building
+      if (Math.abs(ringArea(pts)) < 15) continue;
+      const ring = simplifyXY(pts, 0.3);
+      if (ring.length < 3) continue;
+      const [cx, cz] = centroidOf(ring);
+      const [ix, iz] = [Math.floor(cx / TILE_SIZE), Math.floor(cz / TILE_SIZE)];
+      if (!tiles.has(`${ix},${iz}`)) continue; // outside the area of the tiles
+      const tag = osmTagHeight(w.tags);
+      let height = tag, heightSource: 0 | 1 | 2 = 2;
+      if (height === undefined) {
+        height = heightFromModel(ring.map(([x, z]) => utm32Of(x, z)));
+        heightSource = 1;
+        if (height === undefined) { height = buildingHeight(w.tags); heightSource = 0; }
+      }
+      found.push({ ring, height, heightSource });
+      st.osmBuildings++;
+      if (heightSource === 2) st.osmHeightFromTag++; else if (heightSource === 1) st.osmHeightFromModel++;
+    }
+  }
+  // OSM wins: N50 outlines that are the same buildings, and register points inside or at the wall of an OSM outline, are dropped.
+  const grid = new RingGrid(found.map((f) => f.ring));
+  const centres = new Map<string, XY[]>();
+  for (const f of found) { const c = centroidOf(f.ring), k = `${Math.floor(c[0] / 100)},${Math.floor(c[1] / 100)}`; (centres.get(k) ?? centres.set(k, []).get(k)!).push(c); }
+  const hasCentre = (ring: XY[]) => {
+    const xs = ring.map((p) => p[0]), zs = ring.map((p) => p[1]);
+    for (let i = Math.floor(Math.min(...xs) / 100); i <= Math.floor(Math.max(...xs) / 100); i++) for (let j = Math.floor(Math.min(...zs) / 100); j <= Math.floor(Math.max(...zs) / 100); j++)
+      if ((centres.get(`${i},${j}`) ?? []).some((c) => pointInRing(c[0], c[1], ring))) return true;
+    return false;
+  };
+  for (const t of tiles.values()) {
+    const before = t.buildings.length, pointsBefore = t.points.length;
+    t.buildings = t.buildings.filter((b) => { const [cx, cz] = centroidOf(b.ring); return !grid.covers(cx, cz) && !hasCentre(b.ring); });
+    t.points = t.points.filter((p) => !grid.covers(p.x, p.z, 4));
+    st.n50Dropped += before - t.buildings.length;
+    st.pointsDropped += pointsBefore - t.points.length;
+  }
+  for (const f of found) {
+    const [cx, cz] = centroidOf(f.ring);
+    tileAt(Math.floor(cx / TILE_SIZE), Math.floor(cz / TILE_SIZE)).buildings.push({ height: Math.round(f.height * 10), heightSource: f.heightSource, type: 0, osm: true, ring: f.ring });
+  }
+}
 interface Stats {
+  osmBuildings: number; osmHeightFromTag: number; osmHeightFromModel: number; n50Dropped: number; pointsDropped: number;
   areas: number; rail: number; paths: number; roads: number; buildings: number; buildingsWithModelHeight: number;
   pointsSeen: number; points: number; pointsWithModelHeight: number;
 }
 
 async function main() {
-  const st: Stats = { areas: 0, rail: 0, paths: 0, roads: 0, buildings: 0, buildingsWithModelHeight: 0, pointsSeen: 0, points: 0, pointsWithModelHeight: 0 };
+  const st: Stats = { osmBuildings: 0, osmHeightFromTag: 0, osmHeightFromModel: 0, n50Dropped: 0, pointsDropped: 0, areas: 0, rail: 0, paths: 0, roads: 0, buildings: 0, buildingsWithModelHeight: 0, pointsSeen: 0, points: 0, pointsWithModelHeight: 0 };
   console.log('reading height models');
   dtm = loadField('dtm10', DTM_RES, DTM_BLOCK);
   dom = loadField('dom4', DOM_RES, DTM_BLOCK);
@@ -253,6 +347,7 @@ async function main() {
     console.log(`Bygningspunkt ${name}`);
     await readPoints(join(x, `Basisdata_${code}_${name}_25832_MatrikkelenBygning_GML`, `Basisdata_${code}_${name}_25832_MatrikkelenBygning_GML.gml`), st, outlines);
   }
+  if (!args.includes('--no-osm')) { console.log('OpenStreetMap outlines'); await mergeOsm(st); }
   console.log('terrain');
   addTerrain();
 

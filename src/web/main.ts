@@ -60,8 +60,13 @@ scene.add(grid);
 
 const stops = new Glow(Object.keys(file.stops).length, 2);
 const stopColor = new Color('#7d8aa3');
-for (const [, lat, lon] of Object.values(file.stops)) stops.add(toX(lon), 0, toZ(lat), stopColor, STOP_SIZE, 0.55);
-stops.commit();
+const stopXZ = Object.values(file.stops).map(([, lat, lon]) => [toX(lon), toZ(lat)] as const);
+const placeStops = (height: (x: number, z: number) => number) => {
+  stops.clear();
+  for (const [x, z] of stopXZ) stops.add(x, height(x, z), z, stopColor, STOP_SIZE, 0.55);
+  stops.commit();
+};
+placeStops(() => 0);
 stops.points.renderOrder = 2;
 scene.add(stops.points);
 
@@ -207,6 +212,7 @@ let liftedAt = -1;
 function liftLines(): void {
   if (!kart || !kart.options.terrain || kart.version === liftedAt) return;
   liftedAt = kart.version;
+  placeStops((x, z) => kart!.heightAt(x, z) + 3);
   for (const { position } of shapeLines) {
     for (let i = 0; i < position.count; i++) position.setY(i, kart.heightAt(position.getX(i), position.getZ(i)) + 3);
     position.needsUpdate = true;
