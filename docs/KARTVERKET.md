@@ -122,6 +122,10 @@ Tala er langt under Cloudflare-grensene for statiske filer: 219 filer (grense 20
 
 **Tilråding: statiske filer** i same publisering. Ingen ekstra tenestar, ingen CORS eller tilgangsstyring, og same pipeline som resten. Filene er innhaldsadresserte hos Cloudflare, så berre endra fliser blir lasta opp på nytt ved ny publisering. R2 blir først aktuelt om flisene veks mykje (t.d. 1 m-terreng eller 3D-bygg med takform) og talet på filer nærmar seg 20 000 eller enkeltfiler 25 MiB; dagens fliser kan vekse fleire titals gonger før det skjer. Ulempe med statisk: kvar kartoppdatering krev ny publisering.
 
+## Utvida dekning (7. november 2026)
+
+Fliser dekkjer no alle 97 linjeformer i tidstabellen med 1,5 km margin (`scripts/kartverket/coverage.ts` reknar ut kva fliser det gjeld, frå `public/data/timetable.json`): 262 fliser (44 nye), 12,8 MB rått / 9,5 MB brotli, fint terreng 263 filer. Lasta ned ekstra ca. 112 MB: N50, NVDB Vegnett Pluss og Matrikkelen-bygningspunkt for Lillestrøm, Lørenskog, Rælingen, Nordre Follo, Ås og Nesodden (same CC BY 4.0), pluss to nye 10 km-blokker DTM/DOM (E 616000, N 6642000 og 6652000). `build-tiles.ts` tek berre med data frå nabokommunane i fliser som tidstabellen treng eller som fanst frå før. Etter ny tidstabell: `npm run kartverket:download`, pakk ut zip, køyr `osm.ts`, `kartverket:tiles`, `kartverket:fine`, `kartverket:publish`.
+
 ## Kvalitet og kjende problem
 
 - **Byggehøgder er estimat.** Overflatemodellen kan vere eldre enn bygget (nybygg får feil eller gjetta høgd), og tre tett inntil og kraftige takformer påverkar tala. Ikkje verifisert mot fasit. Bygningspunkt har ikkje omriss: viss kartet skal teikne dei, må storleiken gjettast (t.d. 8×8 m).
