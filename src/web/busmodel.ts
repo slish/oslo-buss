@@ -8,8 +8,8 @@ import {
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 /** Beyond this distance from the camera (meters) a bus is only light; closer than NEAR_NEAR it is only a bus. */
-export const NEAR_FAR = 1500;
-export const NEAR_NEAR = 700;
+export const NEAR_FAR = 2500;
+export const NEAR_NEAR = 1000;
 export const BUS_LENGTH = 12;
 
 /** 0 far away, 1 close: how much of the bus is the model. Smooth. */
