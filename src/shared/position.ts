@@ -129,6 +129,10 @@ function stopIndex(trip: Trip, su: StopUpdate, from: number): number {
 /** Where `trip` is at `nowMs` on service day `date`, or null while it is not on the road. */
 export function busAt(tt: Timetable, trip: Trip, date: string, nowMs: number, update?: TripUpdate): Bus | null {
   if (update?.canceled) return null;
+  if (!update) { // on schedule: most trips are not on the road, and that is cheap to see without building the times
+    const base = osloEpoch(date, trip.start) / 1000, arr = trip.pattern.arr;
+    if (nowMs / 1000 < base + trip.pattern.dep[0] || nowMs / 1000 > base + arr[arr.length - 1]) return null;
+  }
   const e = expectedTimes(trip, date, update);
   const t = nowMs / 1000;
   const n = trip.pattern.stops.length;
