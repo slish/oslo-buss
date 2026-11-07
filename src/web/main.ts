@@ -181,6 +181,17 @@ window.addEventListener('resize', resize);
 resize();
 
 // ---- legend ----
+// The list of lines can be folded away; on a phone it starts folded, so it does not cover the map.
+const legendBody = document.querySelector<HTMLElement>('#legend-body')!;
+const legendToggle = document.querySelector<HTMLButtonElement>('#legend-toggle')!;
+function foldLegend(fold: boolean): void {
+  legendBody.hidden = fold;
+  legendToggle.setAttribute('aria-expanded', String(!fold));
+  legendToggle.querySelector('.arrow')!.textContent = fold ? '▸' : '▾';
+}
+legendToggle.addEventListener('click', () => foldLegend(!legendBody.hidden));
+foldLegend(window.matchMedia('(max-width: 560px)').matches);
+document.querySelector('#legend-count')!.textContent = '(' + file.lines.length + ')';
 const hiddenLines = new Set<string>();
 const legendItems = new Map<string, HTMLLIElement>();
 function applyLineVisibility(): void {
