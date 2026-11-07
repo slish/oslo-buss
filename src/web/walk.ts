@@ -4,8 +4,8 @@
 import { MathUtils } from 'three';
 
 export const EYE_HEIGHT = 1.7; // meters over the ground
-export const WALK_SPEED = 1.5; // m/s
-export const RUN_SPEED = 6; // m/s
+export const WALK_SPEED = 2; // m/s: a brisk walk
+export const RUN_SPEED = 8; // m/s
 export const BODY_RADIUS = 0.4; // meters: how close to a wall we get
 const MAX_PITCH = 1.45; // a little short of straight up or down
 const SPEED_EASE = 10; // 1/s: how quickly we get up to speed and stop

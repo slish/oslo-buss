@@ -14,14 +14,14 @@ describe('stepWalk', () => {
     expect(startWalk(0, 0, 0, () => 42).eyeY).toBeCloseTo(42 + EYE_HEIGHT);
   });
 
-  it('walks north (negative z) at about 1.5 m/s when facing north', () => {
+  it('walks north (negative z) at about 2 m/s when facing north', () => {
     const s = walkFor(startWalk(0, 0, 0, flat), 10, forward);
     expect(Math.abs(s.x)).toBeLessThan(1e-9);
     expect(-s.z / 10).toBeGreaterThan(WALK_SPEED * 0.9);
     expect(-s.z / 10).toBeLessThanOrEqual(WALK_SPEED);
   });
 
-  it('runs at about 6 m/s', () => {
+  it('runs at about 8 m/s', () => {
     const s = walkFor(startWalk(0, 0, 0, flat), 10, { ...forward, run: true });
     expect(-s.z / 10).toBeGreaterThan(RUN_SPEED * 0.9);
     expect(-s.z / 10).toBeLessThanOrEqual(RUN_SPEED);
