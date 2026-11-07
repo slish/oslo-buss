@@ -15,8 +15,8 @@ export interface Env {
   TIMETABLE_URL: string;
 }
 
-/** The timetable is read again this often: the Action writes a new one every night. */
-const TIMETABLE_TTL = 6 * 60 * 60 * 1000;
+/** The timetable is checked again this often (a cheap conditional request): the Action writes a new one every night. */
+const TIMETABLE_TTL = 30 * 60 * 1000;
 /** After a failed read, wait this long before trying again. */
 const TIMETABLE_RETRY = 60 * 1000;
 
@@ -24,6 +24,7 @@ export class Feeds extends DurableObject<Env> {
   private json: string | null = null;
   private feed: BusFeed | null = null;
   private loadedAt = 0;
+  private etag: string | null = null;
   private failedAt = 0;
   private loading: Promise<void> | null = null;
 
@@ -33,11 +34,15 @@ export class Feeds extends DurableObject<Env> {
     this.loadedAt = loadedAt;
   }
 
+  private async remember(extra: Record<string, unknown>): Promise<void> {
+    await this.ctx.storage.put({ loadedAt: this.loadedAt, etag: this.etag, ...extra });
+  }
+
   /** The copy in storage, if there is one: it is used even when old, until a fresh one has been read. */
   private async restore(): Promise<void> {
     try {
-      const [bytes, at] = await Promise.all([this.ctx.storage.get<Uint8Array>('timetable'), this.ctx.storage.get<number>('loadedAt')]);
-      if (bytes && at) this.start(await unpack(bytes), at);
+      const [bytes, at, etag] = await Promise.all([this.ctx.storage.get<Uint8Array>('timetable'), this.ctx.storage.get<number>('loadedAt'), this.ctx.storage.get<string>('etag')]);
+      if (bytes && at) { this.start(await unpack(bytes), at); this.etag = etag ?? null; }
     } catch (e) {
       console.warn('Stored timetable not read:', String(e));
     }
@@ -52,12 +57,14 @@ export class Feeds extends DurableObject<Env> {
         if (this.json && now - this.loadedAt < TIMETABLE_TTL) return;
         if (now - this.failedAt < TIMETABLE_RETRY) return;
         try {
-          const response = await fetch(this.env.TIMETABLE_URL, { signal: AbortSignal.timeout(15_000), headers: { 'user-agent': 'slish-oslo-buss' } });
+          const response = await fetch(this.env.TIMETABLE_URL, { signal: AbortSignal.timeout(15_000), headers: { 'user-agent': 'slish-oslo-buss', ...(this.json && this.etag ? { 'if-none-match': this.etag } : {}) } });
+          if (response.status === 304) { this.loadedAt = Date.now(); await this.remember({}); return; }
           if (!response.ok) throw new Error(`timetable ${response.status}`);
           const text = await response.text();
           const bytes = await pack(text);
           this.start(text, Date.now());
-          await this.ctx.storage.put({ timetable: bytes, loadedAt: this.loadedAt });
+          this.etag = response.headers.get('etag');
+          await this.remember({ timetable: bytes });
         } catch (e) {
           this.failedAt = Date.now();
           console.warn('Timetable not read:', String(e));
