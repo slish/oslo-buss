@@ -12,6 +12,7 @@ import { linesAt, lineInfo, nextDepartures } from '../shared/departures';
 const BUS_SIZE = 420; // meters across on the ground
 const STOP_SIZE = 70;
 const FOV = 45;
+const RIDE_FOV = 70; // from the seat: wide, like an eye, so that the road and the buildings along it are not squeezed
 
 const canvas = document.querySelector<HTMLCanvasElement>('#scene')!;
 const statusEl = document.querySelector<HTMLElement>('#status')!;
@@ -143,14 +144,24 @@ if (import.meta.env.DEV) Object.assign(window, { __oslo: { camera, controls, toX
 let nearNow = 0, farNow = 0;
 let stopShrink = 1; // the markers of the stops are 70 m discs: close up they shrink with the distance, so they do not cover the street
 function keepAbove(): void {
-  const dist = controls.distance;
+  // Seen from the seat there is no distance to a target (controls.distance is stale then): near is at arm's length so that
+  // the road and the buildings beside it are not cut away, far is a few kilometers.
+  const riding = controls.riding;
+  const dist = riding ? 40 : controls.distance;
+  const fov = riding ? RIDE_FOV : FOV;
+  let projection = false;
+  if (camera.fov !== fov) {
+    camera.fov = Math.abs(camera.fov - fov) < 0.2 ? fov : camera.fov + (fov - camera.fov) * 0.2;
+    projection = true;
+  }
   const shrink = Math.min(1, Math.max(0.06, dist / 2500));
   if (Math.abs(shrink - stopShrink) > 0.01) { stopShrink = shrink; resize(); }
-  const near = Math.min(100, Math.max(0.5, dist * 0.01)), far = Math.min(400_000, Math.max(20_000, dist * 8));
+  const near = riding ? 0.3 : Math.min(100, Math.max(0.5, dist * 0.01)), far = riding ? 25_000 : Math.min(400_000, Math.max(20_000, dist * 8));
   if (Math.abs(near / nearNow - 1) > 0.03 || Math.abs(far / farNow - 1) > 0.03) {
     nearNow = camera.near = near; farNow = camera.far = far;
-    camera.updateProjectionMatrix();
+    projection = true;
   }
+  if (projection) camera.updateProjectionMatrix();
 }
 
 function resize(): void {
@@ -159,7 +170,7 @@ function resize(): void {
   renderer.setSize(window.innerWidth, window.innerHeight, false);
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
-  const pixelsPerMeter = (window.innerHeight * ratio) / (2 * Math.tan((FOV * Math.PI) / 360));
+  const pixelsPerMeter = (window.innerHeight * ratio) / (2 * Math.tan((camera.fov * Math.PI) / 360));
   buses.setScale(pixelsPerMeter, ratio, 9);
   stops.setScale(pixelsPerMeter * stopShrink, ratio, 2);
 }
