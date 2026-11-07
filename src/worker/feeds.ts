@@ -1,10 +1,12 @@
 // The feeds' Durable Object: one place in the world that asks Entur, however many players and data centers there are.
 // It holds the timetable (read from the `data` branch that the daily GitHub Action writes) and the bus feed, and answers
-// GET /feeds/buses and GET /data/timetable.json. Entur sees one request every 15 s, and only while someone asks.
+// GET /feeds/buses and GET /data/timetable.json. The timetable is also kept (gzipped) in the object's own storage, so that a
+// cold start after the object was evicted does not have to read it from GitHub again. Entur sees one request every 15 s, and only while someone asks.
 
 import { DurableObject } from 'cloudflare:workers';
 import { BusFeed } from '../relay/buses';
 import { Timetable, type TimetableFile } from '../shared/timetable';
+import { pack, unpack } from './pack';
 
 export interface Env {
   FEEDS: DurableObjectNamespace<Feeds>;
@@ -25,23 +27,41 @@ export class Feeds extends DurableObject<Env> {
   private failedAt = 0;
   private loading: Promise<void> | null = null;
 
+  private start(text: string, loadedAt: number): void {
+    this.feed = new BusFeed(new Timetable(JSON.parse(text) as TimetableFile), { onError: (e) => console.warn('Entur:', String(e)) });
+    this.json = text;
+    this.loadedAt = loadedAt;
+  }
+
+  /** The copy in storage, if there is one: it is used even when old, until a fresh one has been read. */
+  private async restore(): Promise<void> {
+    try {
+      const [bytes, at] = await Promise.all([this.ctx.storage.get<Uint8Array>('timetable'), this.ctx.storage.get<number>('loadedAt')]);
+      if (bytes && at) this.start(await unpack(bytes), at);
+    } catch (e) {
+      console.warn('Stored timetable not read:', String(e));
+    }
+  }
+
   private load(): Promise<void> {
-    const now = Date.now();
     if (this.loading) return this.loading;
-    if (this.json && now - this.loadedAt < TIMETABLE_TTL) return Promise.resolve();
-    if (now - this.failedAt < TIMETABLE_RETRY) return Promise.resolve();
     this.loading = (async () => {
       try {
-        const response = await fetch(this.env.TIMETABLE_URL, { signal: AbortSignal.timeout(15_000), headers: { 'user-agent': 'slish-oslo-buss' } });
-        if (!response.ok) throw new Error(`timetable ${response.status}`);
-        const text = await response.text();
-        const timetable = new Timetable(JSON.parse(text) as TimetableFile);
-        this.json = text;
-        this.feed = new BusFeed(timetable, { onError: (e) => console.warn('Entur:', String(e)) });
-        this.loadedAt = Date.now();
-      } catch (e) {
-        this.failedAt = Date.now();
-        console.warn('Timetable not read:', String(e));
+        if (!this.json) await this.restore();
+        const now = Date.now();
+        if (this.json && now - this.loadedAt < TIMETABLE_TTL) return;
+        if (now - this.failedAt < TIMETABLE_RETRY) return;
+        try {
+          const response = await fetch(this.env.TIMETABLE_URL, { signal: AbortSignal.timeout(15_000), headers: { 'user-agent': 'slish-oslo-buss' } });
+          if (!response.ok) throw new Error(`timetable ${response.status}`);
+          const text = await response.text();
+          const bytes = await pack(text);
+          this.start(text, Date.now());
+          await this.ctx.storage.put({ timetable: bytes, loadedAt: this.loadedAt });
+        } catch (e) {
+          this.failedAt = Date.now();
+          console.warn('Timetable not read:', String(e));
+        }
       } finally {
         this.loading = null;
       }
