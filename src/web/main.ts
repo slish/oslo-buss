@@ -168,6 +168,13 @@ for (const line of file.lines) {
 
 // ---- picking: the bus nearest the pointer on the screen ----
 let selected: string | null = null;
+let riding: string | null = null; // the id of the bus we sit on
+function ride(id: string | null): void {
+  riding = id;
+  if (!id) controls.follow(null);
+  showInfo();
+}
+addEventListener('keydown', (e) => { if (e.key === 'Escape' && riding) ride(null); });
 const screen = new Vector3();
 function busAt(clientX: number, clientY: number): Track | null {
   let best: Track | null = null, bestD = 18; // pixels
@@ -183,7 +190,7 @@ function busAt(clientX: number, clientY: number): Track | null {
 let down: { x: number; y: number } | null = null;
 canvas.addEventListener('pointerdown', (e) => { down = { x: e.clientX, y: e.clientY }; });
 canvas.addEventListener('pointerup', (e) => {
-  if (!down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 5) return;
+  if (riding || !down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 5) return;
   selected = busAt(e.clientX, e.clientY)?.bus.id ?? null;
   showInfo();
 });
@@ -204,7 +211,11 @@ function showInfo(): void {
     <div class="head"><span class="badge" style="color:${colorOf(b.line)}"></span><span class="to"></span></div>
     <div class="row"><b class="where"></b></div>
     <div class="row">Forseinking: <b class="delay ${d.cls}"></b></div>
-    <div class="row source"></div>`;
+    <div class="row source"></div>
+    <button id="ride" type="button"></button>`;
+  const rideButton = infoEl.querySelector<HTMLButtonElement>('#ride')!;
+  rideButton.textContent = riding === b.id ? 'Gå av bussen' : 'Sitt på bussen';
+  rideButton.addEventListener('click', () => ride(riding === b.id ? null : b.id));
   infoEl.querySelector('.badge')!.textContent = b.line;
   infoEl.querySelector('.to')!.textContent = `mot ${b.headsign}`;
   infoEl.querySelector('.where')!.textContent = `${b.atStop ? 'Ved' : 'På veg til'} ${b.next}`;
@@ -247,7 +258,9 @@ function frame(now: number): void {
   store.tick(dt);
   buses.clear();
   busModels.clear();
+  let ridden: Track | undefined;
   for (const t of store.tracks.values()) {
+    if (t.bus.id === riding) { ridden = t; continue; } // from the seat the bus itself is not drawn
     tmp.set(colorOf(t.bus.line));
     const chosen = t.bus.id === selected;
     const ground = kart?.heightAt(t.x, t.z) ?? 0;
@@ -267,6 +280,10 @@ function frame(now: number): void {
   }
   busModels.commit();
   buses.commit();
+  if (riding) {
+    if (!ridden || ridden.leaving) ride(null);
+    else controls.follow({ x: ridden.x, y: kart?.heightAt(ridden.x, ridden.z) ?? 0, z: ridden.z, bearing: ridden.bearing });
+  }
   controls.update(dt);
   kart?.update(camera, controls.target, now);
   liftLines();
