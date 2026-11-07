@@ -102,14 +102,18 @@ export class MapCamera {
     let target = (r.bearing * Math.PI) / 180, d = target - this.heading;
     d = Math.atan2(Math.sin(d), Math.cos(d));
     this.heading += d * k;
-    this.seat.set(r.x, this.seat.y + (r.y - this.seat.y) * Math.min(1, k * 2), r.z);
     if (this.mode !== 'turn') { // let go: the view eases back to the road ahead
       this.look.yaw *= Math.exp(-dt * 1.5);
       this.look.pitch += (-0.04 - this.look.pitch) * (1 - Math.exp(-dt * 1.5));
     }
     const yaw = this.heading + this.look.yaw, pitch = this.look.pitch;
     const dx = Math.sin(yaw) * Math.cos(pitch), dz = -Math.cos(yaw) * Math.cos(pitch), dy = Math.sin(pitch);
-    this.camera.position.set(this.seat.x, this.seat.y + 2.6, this.seat.z); // the eyes of a passenger, a little above the road
+    // The eyes sit above the highest ground under the bus and a few meters the way we look: a hill must not swallow the view.
+    // Up is immediate, down eases, so the view does not bob.
+    const hx = Math.sin(yaw), hz = -Math.cos(yaw);
+    const ground = Math.max(r.y, this.ground(r.x, r.z), this.ground(r.x + hx * 8, r.z + hz * 8), this.ground(r.x + hx * 20, r.z + hz * 20));
+    this.seat.set(r.x, ground > this.seat.y ? ground : this.seat.y + (ground - this.seat.y) * Math.min(1, k * 2), r.z);
+    this.camera.position.set(this.seat.x, this.seat.y + 3.2, this.seat.z); // the eyes of a passenger, a little above the road
     this.camera.lookAt(this.camera.position.x + dx * 40, this.camera.position.y + dy * 40, this.camera.position.z + dz * 40);
     this.target.set(r.x, r.y, r.z);
     this.now.x = r.x; this.now.z = r.z;
@@ -203,7 +207,7 @@ export class MapCamera {
     prev.x = e.clientX; prev.y = e.clientY;
     if (this.ridden) { // look around from the seat; the view eases back to the road ahead when you let go
       if (this.mode === 'turn') {
-        this.look.yaw = MathUtils.clamp(this.look.yaw - dx * 0.006, -Math.PI, Math.PI);
+        this.look.yaw = MathUtils.clamp(this.look.yaw + dx * 0.006, -Math.PI, Math.PI);
         this.look.pitch = MathUtils.clamp(this.look.pitch - dy * 0.005, -0.9, 0.7);
       }
       return;

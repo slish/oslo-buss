@@ -12,6 +12,7 @@ import { linesAt, lineInfo, nextDepartures } from '../shared/departures';
 const BUS_SIZE = 420; // meters across on the ground
 const STOP_SIZE = 70;
 const FOV = 45;
+const RIDE_FOV = 70; // from the seat: wide, like an eye, so that the road and the buildings along it are not squeezed
 
 const canvas = document.querySelector<HTMLCanvasElement>('#scene')!;
 const statusEl = document.querySelector<HTMLElement>('#status')!;
@@ -37,6 +38,7 @@ const file = store.timetable.file;
 const shapeLines: { position: Float32BufferAttribute }[] = [];
 const lineMaterials = new Map<string, LineBasicMaterial[]>();
 const shapeIds: string[] = [];
+const roads: Line[] = []; // the colored roads of the lines
 const lineOfShape = new Map<string, string>();
 for (const p of file.patterns) lineOfShape.set(p.shape, file.lines[p.line].name);
 
@@ -57,6 +59,7 @@ for (const [id, shape] of store.timetable.shapes) {
   const lineName = lineOfShape.get(id) ?? '';
   lineMaterials.set(lineName, [...(lineMaterials.get(lineName) ?? []), material]);
   const road = new Line(geometry, material);
+  roads.push(road);
   road.renderOrder = 1; // after the map, whatever the buildings in between: the lights show through
   scene.add(road);
 }
@@ -143,14 +146,24 @@ if (import.meta.env.DEV) Object.assign(window, { __oslo: { camera, controls, toX
 let nearNow = 0, farNow = 0;
 let stopShrink = 1; // the markers of the stops are 70 m discs: close up they shrink with the distance, so they do not cover the street
 function keepAbove(): void {
-  const dist = controls.distance;
+  // Seen from the seat there is no distance to a target (controls.distance is stale then): near is at arm's length so that
+  // the road and the buildings beside it are not cut away, far is a few kilometers.
+  const riding = controls.riding;
+  const dist = riding ? 40 : controls.distance;
+  const fov = riding ? RIDE_FOV : FOV;
+  let projection = false;
+  if (camera.fov !== fov) {
+    camera.fov = Math.abs(camera.fov - fov) < 0.2 ? fov : camera.fov + (fov - camera.fov) * 0.2;
+    projection = true;
+  }
   const shrink = Math.min(1, Math.max(0.06, dist / 2500));
   if (Math.abs(shrink - stopShrink) > 0.01) { stopShrink = shrink; resize(); }
-  const near = Math.min(100, Math.max(0.5, dist * 0.01)), far = Math.min(400_000, Math.max(20_000, dist * 8));
+  const near = riding ? 0.3 : Math.min(100, Math.max(0.5, dist * 0.01)), far = riding ? 25_000 : Math.min(400_000, Math.max(20_000, dist * 8));
   if (Math.abs(near / nearNow - 1) > 0.03 || Math.abs(far / farNow - 1) > 0.03) {
     nearNow = camera.near = near; farNow = camera.far = far;
-    camera.updateProjectionMatrix();
+    projection = true;
   }
+  if (projection) camera.updateProjectionMatrix();
 }
 
 function resize(): void {
@@ -159,7 +172,7 @@ function resize(): void {
   renderer.setSize(window.innerWidth, window.innerHeight, false);
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
-  const pixelsPerMeter = (window.innerHeight * ratio) / (2 * Math.tan((FOV * Math.PI) / 360));
+  const pixelsPerMeter = (window.innerHeight * ratio) / (2 * Math.tan((camera.fov * Math.PI) / 360));
   buses.setScale(pixelsPerMeter, ratio, 9);
   stops.setScale(pixelsPerMeter * stopShrink, ratio, 2);
 }
@@ -191,6 +204,8 @@ function choose(what: { bus?: string; stop?: string; line?: string }): void {
 let riding: string | null = null; // the id of the bus we sit on
 function ride(id: string | null): void {
   riding = id;
+  for (const road of roads) road.visible = !id; // from the seat the colored lines and the glowing stops are only noise
+  stops.points.visible = mark.points.visible = !id;
   if (!id) controls.follow(null);
   showInfo();
 }
@@ -365,7 +380,7 @@ function frame(now: number): void {
     const m = modelness(Math.hypot(camera.position.x - t.x, camera.position.y - ground, camera.position.z - t.z));
     const alpha = t.alpha * (t.bus.live ? 1 : 0.5);
     const size = (chosen ? BUS_SIZE * 1.8 : BUS_SIZE) * (1 - 0.92 * m);
-    buses.add(t.x, 6 + ground, t.z, tmp, chosen ? Math.max(size, 30) : size, alpha * (1 - (chosen ? 0.7 : 0.85) * m));
+    if (!riding) buses.add(t.x, 6 + ground, t.z, tmp, chosen ? Math.max(size, 30) : size, alpha * (1 - (chosen ? 0.7 : 0.85) * m)); // from the seat the other buses do not glow, only the models close by show
     if (m > 0) {
       let pitch = 0;
       if (kart?.options.terrain) {
