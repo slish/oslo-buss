@@ -38,6 +38,7 @@ const file = store.timetable.file;
 const shapeLines: { position: Float32BufferAttribute }[] = [];
 const lineMaterials = new Map<string, LineBasicMaterial[]>();
 const shapeIds: string[] = [];
+const roads: Line[] = []; // the colored roads of the lines
 const lineOfShape = new Map<string, string>();
 for (const p of file.patterns) lineOfShape.set(p.shape, file.lines[p.line].name);
 
@@ -58,6 +59,7 @@ for (const [id, shape] of store.timetable.shapes) {
   const lineName = lineOfShape.get(id) ?? '';
   lineMaterials.set(lineName, [...(lineMaterials.get(lineName) ?? []), material]);
   const road = new Line(geometry, material);
+  roads.push(road);
   road.renderOrder = 1; // after the map, whatever the buildings in between: the lights show through
   scene.add(road);
 }
@@ -202,6 +204,7 @@ function choose(what: { bus?: string; stop?: string; line?: string }): void {
 let riding: string | null = null; // the id of the bus we sit on
 function ride(id: string | null): void {
   riding = id;
+  for (const road of roads) road.visible = !id; // from the seat the colored lines are only noise
   if (!id) controls.follow(null);
   showInfo();
 }

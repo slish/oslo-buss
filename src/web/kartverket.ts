@@ -19,6 +19,7 @@ const ROAD_STYLE = [
   { color: '#344a78', opacity: 0.7 }, { color: '#2b3d64', opacity: 0.55 }, { color: '#1c2a40', opacity: 0.4 }, { color: '#6a5a8c', opacity: 0.7 },
 ];
 const POINT_SIZE = 8; // meters across: the register only has a point for most buildings
+const FOUNDATION = 1.5; // meters the walls reach below the lowest ground (with ?terreng=1)
 const NEAR = 6500; // from the camera, meters: buildings and small roads are drawn within this
 const MAX_TILES = 90;
 const MAX_FETCHES = 4;
@@ -228,15 +229,32 @@ export class KartverketMap {
     return meshes;
   }
 
+  /**
+   * A building on a slope: the walls start below the lowest ground under the footprint (and a little deeper still, as a
+   * foundation), so that from close up there is never a gap under the uphill side. The roof stays `height` above the highest
+   * ground, so the downhill wall is the taller one, as in life.
+   */
+  private onGround(ring: [number, number][], height: number): Block {
+    const first = ring[0];
+    if (!this.options.terrain) return { ring, height, base: this.heightAt(first[0], first[1]) };
+    let low = Infinity, high = -Infinity;
+    const step = Math.max(1, Math.floor(ring.length / 12));
+    for (let i = 0; i < ring.length; i += step) {
+      const g = this.heightAt(ring[i][0], ring[i][1]);
+      low = Math.min(low, g); high = Math.max(high, g);
+    }
+    const base = low - FOUNDATION;
+    return { ring, height: high + height - base, base };
+  }
+
   private buildingMesh(tile: Tile): Object3D | undefined {
     const blocks: Block[] = [];
     for (const b of tile.buildings) {
-      const c = b.ring[0];
-      blocks.push({ ring: b.ring, height: b.height / 10, base: this.heightAt(c[0], c[1]) });
+      blocks.push(this.onGround(b.ring, b.height / 10));
     }
     const h = POINT_SIZE / 2;
     for (const p of tile.points) {
-      blocks.push({ ring: [[p.x - h, p.z - h], [p.x + h, p.z - h], [p.x + h, p.z + h], [p.x - h, p.z + h]], height: p.height / 10, base: this.heightAt(p.x, p.z), quad: true });
+      blocks.push({ ...this.onGround([[p.x - h, p.z - h], [p.x + h, p.z - h], [p.x + h, p.z + h], [p.x - h, p.z + h]], p.height / 10), quad: true });
     }
     if (!blocks.length) return undefined;
     const mesh = extrudeBlocks(blocks);
