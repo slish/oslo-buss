@@ -24,6 +24,19 @@ export function osloTime(epochMs: number): OsloTime {
  * the clocks change a time such as 03:30 is still real elapsed time from that reference.
  */
 export function osloEpoch(date: string, secs: number): number {
+  let start = dayStart.get(date);
+  if (start === undefined) {
+    start = osloDayStart(date);
+    if (dayStart.size > 16) dayStart.clear();
+    dayStart.set(date, start);
+  }
+  return start + secs * 1000;
+}
+
+// The search for the day's noon formats dates, which is slow: once per day is enough.
+const dayStart = new Map<string, number>();
+
+function osloDayStart(date: string): number {
   const y = Number(date.slice(0, 4)), m = Number(date.slice(4, 6)), d = Number(date.slice(6, 8));
   const noonAsUtc = Date.UTC(y, m - 1, d, 12);
   let noon = noonAsUtc;
@@ -31,7 +44,7 @@ export function osloEpoch(date: string, secs: number): number {
     const f = fields(noon);
     noon += noonAsUtc - Date.UTC(f.year, f.month - 1, f.day, f.hour, f.minute, f.second);
   }
-  return noon - 12 * 3_600_000 + secs * 1000;
+  return noon - 12 * 3_600_000;
 }
 
 /** The date before `date` (YYYYMMDD). */
