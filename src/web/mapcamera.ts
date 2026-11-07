@@ -40,6 +40,11 @@ export class MapCamera {
   private mode: 'pan' | 'turn' | 'pinch' | null = null;
   private grab: Vector3 | null = null;
   private pinch = { distance: 0, angle: 0, x: 0, y: 0 };
+  /** While riding: where the bus is, and which way it heads (degrees clockwise from north). */
+  private ridden: { x: number; y: number; z: number; bearing: number } | null = null;
+  private heading = 0; // smoothed, radians
+  private look = { yaw: 0, pitch: -0.04 }; // where the passenger looks, relative to the bus
+  private seat = new Vector3();
 
   constructor(readonly camera: PerspectiveCamera, private readonly canvas: HTMLElement, start: View) {
     this.want = { ...start };
@@ -55,6 +60,23 @@ export class MapCamera {
     window.addEventListener('keydown', this.onKey);
   }
 
+  get riding(): boolean { return this.ridden !== null; }
+
+  /** Sit on a bus: call every frame with its place while riding, and with null to get off. */
+  follow(bus: { x: number; y: number; z: number; bearing: number } | null): void {
+    if (bus && !this.ridden) {
+      this.heading = (bus.bearing * Math.PI) / 180;
+      this.look = { yaw: 0, pitch: -0.04 };
+      this.seat.set(bus.x, bus.y, bus.z);
+    } else if (!bus && this.ridden) {
+      // Getting off: float up behind the bus, looking down on it from a few dozen meters.
+      const r = this.ridden;
+      this.want = { x: r.x, z: r.z, distance: 60, yaw: this.heading + this.look.yaw + Math.PI, elevation: 0.5 };
+      this.now = { ...this.want, distance: 8, elevation: 0.2 };
+    }
+    this.ridden = bus;
+  }
+
   get distance(): number { return this.now.distance; }
   get view(): View { return { ...this.now }; }
   setGround(ground: Ground): void { this.ground = ground; }
@@ -63,6 +85,7 @@ export class MapCamera {
 
   /** Call every frame: eases toward what was asked, keeps the camera above the ground, and moves the real camera. */
   update(dt: number): void {
+    if (this.ridden) return this.updateRide(dt);
     const k = 1 - Math.exp(-dt * 16);
     const n = this.now, w = this.want;
     n.x += (w.x - n.x) * k;
@@ -71,6 +94,25 @@ export class MapCamera {
     n.yaw += (w.yaw - n.yaw) * k;
     n.elevation += (w.elevation - n.elevation) * k;
     this.place();
+  }
+
+  private updateRide(dt: number): void {
+    const r = this.ridden!, k = 1 - Math.exp(-dt * 6);
+    // The road bends in corners: ease toward the bearing along the short way round, so the view turns instead of snapping.
+    let target = (r.bearing * Math.PI) / 180, d = target - this.heading;
+    d = Math.atan2(Math.sin(d), Math.cos(d));
+    this.heading += d * k;
+    this.seat.set(r.x, this.seat.y + (r.y - this.seat.y) * Math.min(1, k * 2), r.z);
+    if (this.mode !== 'turn') { // let go: the view eases back to the road ahead
+      this.look.yaw *= Math.exp(-dt * 1.5);
+      this.look.pitch += (-0.04 - this.look.pitch) * (1 - Math.exp(-dt * 1.5));
+    }
+    const yaw = this.heading + this.look.yaw, pitch = this.look.pitch;
+    const dx = Math.sin(yaw) * Math.cos(pitch), dz = -Math.cos(yaw) * Math.cos(pitch), dy = Math.sin(pitch);
+    this.camera.position.set(this.seat.x, this.seat.y + 2.6, this.seat.z); // the eyes of a passenger, a little above the road
+    this.camera.lookAt(this.camera.position.x + dx * 40, this.camera.position.y + dy * 40, this.camera.position.z + dz * 40);
+    this.target.set(r.x, r.y, r.z);
+    this.now.x = r.x; this.now.z = r.z;
   }
 
   private place(): void {
@@ -134,16 +176,19 @@ export class MapCamera {
 
   private readonly onWheel = (e: WheelEvent): void => {
     e.preventDefault();
+    if (this.ridden) return;
     const lines = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1;
     const delta = MathUtils.clamp(e.deltaY * lines, -240, 240);
     this.zoom(e.clientX, e.clientY, Math.exp(delta * (e.ctrlKey ? 0.01 : 0.0018))); // ctrl is the pinch of a trackpad
   };
 
-  private readonly onDouble = (e: MouseEvent): void => { this.zoom(e.clientX, e.clientY, e.shiftKey ? 2.5 : 0.4); };
+  private readonly onDouble = (e: MouseEvent): void => {
+    if (this.ridden) return; this.zoom(e.clientX, e.clientY, e.shiftKey ? 2.5 : 0.4); };
 
   private readonly onDown = (e: PointerEvent): void => {
     this.canvas.setPointerCapture(e.pointerId);
     this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (this.ridden) { this.mode = 'turn'; return; }
     if (this.pointers.size === 2) { this.startPinch(); return; }
     if (this.pointers.size > 2) return;
     this.mode = e.button === 2 || e.button === 1 || e.shiftKey || e.ctrlKey || e.metaKey ? 'turn' : 'pan';
@@ -156,6 +201,13 @@ export class MapCamera {
     if (!prev) return;
     const dx = e.clientX - prev.x, dy = e.clientY - prev.y;
     prev.x = e.clientX; prev.y = e.clientY;
+    if (this.ridden) { // look around from the seat; the view eases back to the road ahead when you let go
+      if (this.mode === 'turn') {
+        this.look.yaw = MathUtils.clamp(this.look.yaw - dx * 0.006, -Math.PI, Math.PI);
+        this.look.pitch = MathUtils.clamp(this.look.pitch - dy * 0.005, -0.9, 0.7);
+      }
+      return;
+    }
     if (this.mode === 'pinch' && this.pointers.size === 2) { this.movePinch(); return; }
     if (this.mode === 'turn') {
       this.want.yaw -= dx * 0.006;
@@ -200,6 +252,7 @@ export class MapCamera {
 
   private readonly onKey = (e: KeyboardEvent): void => {
     if (e.target instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+    if (this.ridden) return;
     const w = this.want, step = w.distance * 0.12;
     const forward = [-Math.sin(w.yaw), -Math.cos(w.yaw)], right = [Math.cos(w.yaw), -Math.sin(w.yaw)];
     const move = (f: number, r: number) => { w.x += forward[0] * step * f + right[0] * step * r; w.z += forward[1] * step * f + right[1] * step * r; };
