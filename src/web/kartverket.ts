@@ -11,6 +11,7 @@ import { decodeTile, TILE_SIZE, tileName, type Tile, type XY } from '../shared/t
 import { extrudeBlocks, type Block } from './basemap';
 import { daylit, daylitLine, SNOW_BY_CLASS } from './daylight';
 import { upsample2 } from '../shared/terrain';
+import { footprintOf, insideAny, type Footprint } from './walk';
 import { rideColor, ASPHALT, GRAVEL, noise } from './terrainstyle';
 
 const BASE = '/kartverket-tiles/';
@@ -45,6 +46,8 @@ interface Loaded {
   /** Asphalt laid on the fine terrain: while it is there the thin road lines of the tile are hidden. */
   asphalt?: Mesh;
   fineState?: 'loading' | 'ready';
+  /** Building outlines for walking into walls, made the first time they are asked for. */
+  footprints?: Footprint[];
 }
 
 export interface KartOptions { terrain: boolean }
@@ -92,6 +95,17 @@ export class KartverketMap {
     const i = Math.floor(fx), j = Math.floor(fz), tx = fx - i, tz = fz - j;
     const h = (a: number, b: number) => t.heights[b * t.n + a];
     return ((h(i, j) * (1 - tx) + h(i + 1, j) * tx) * (1 - tz) + (h(i, j + 1) * (1 - tx) + h(i + 1, j + 1) * tx) * tz) / 10;
+  }
+
+  /** True if the scene point is inside the outline of a building (or the square of one known only as a point). Used to keep walkers out. */
+  insideBuilding(x: number, z: number): boolean {
+    const l = this.tiles.get(tileName(Math.floor(x / TILE_SIZE), Math.floor(z / TILE_SIZE)));
+    if (!l) return false;
+    l.footprints ??= [
+      ...l.tile.buildings.map((b) => footprintOf(b.ring)),
+      ...l.tile.points.map((p) => footprintOf([[p.x - POINT_SIZE / 2, p.z - POINT_SIZE / 2], [p.x + POINT_SIZE / 2, p.z - POINT_SIZE / 2], [p.x + POINT_SIZE / 2, p.z + POINT_SIZE / 2], [p.x - POINT_SIZE / 2, p.z + POINT_SIZE / 2]])),
+    ];
+    return insideAny(x, z, l.footprints);
   }
 
   /**

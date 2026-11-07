@@ -187,7 +187,7 @@ let stopShrink = 1; // the markers of the stops are 70 m discs: close up they sh
 function keepAbove(): void {
   // Seen from the seat there is no distance to a target (controls.distance is stale then): near is at arm's length so that
   // the road and the buildings beside it are not cut away, far is a few kilometers.
-  const riding = controls.riding;
+  const riding = controls.firstPerson; // on a seat or on foot: the same wide eye
   const dist = riding ? 40 : controls.distance;
   const fov = riding ? RIDE_FOV : FOV;
   let projection = false;
@@ -266,6 +266,7 @@ function choose(what: { bus?: string; stop?: string; line?: string }): void {
 let riding: string | null = null; // the id of the bus we sit on
 function ride(id: string | null): void {
   riding = id;
+  if (id) controls.stopWalking();
   for (const road of roads) road.visible = !id; // from the seat the colored lines and the glowing stops are only noise
   stops.points.visible = mark.points.visible = !id;
   kart?.setRide(!!id);
@@ -273,6 +274,42 @@ function ride(id: string | null): void {
   showInfo();
 }
 addEventListener('keydown', (e) => { if (e.key === 'Escape' && riding) ride(null); });
+// ---- walking: on foot on the ground, 1.7 m over the terrain (see walk.ts) ----
+const walkButton = document.querySelector<HTMLButtonElement>('#opt-gaa')!;
+const walkHint = document.querySelector<HTMLElement>('#walk-hint')!;
+let lastPointer: { x: number; y: number } | null = null;
+let walls = true; // buildings stop the walker; B turns it off
+let walkShown = false;
+/** Steps down where the pointer is (or at the focus of the map if there is no pointer on it). */
+function walkAt(at?: { x: number; y: number } | null): void {
+  if (riding) return;
+  const p = at ? controls.pickGround(at.x, at.y) : null;
+  controls.startWalking(p?.x ?? controls.target.x, p?.z ?? controls.target.z);
+}
+/** The map and the lights follow the walking state, whoever ended it (the Esc of the pointer lock, a bus ride, the button). */
+function syncWalk(): void {
+  const w = controls.walking;
+  if (w === walkShown) return;
+  walkShown = w;
+  for (const road of roads) road.visible = !w && !riding;
+  stops.points.visible = mark.points.visible = !w && !riding;
+  kart?.setRide(w || !!riding);
+  walkHint.hidden = !w;
+  walkButton.setAttribute('aria-pressed', String(w));
+  if (w) choose({});
+}
+controls.setBlocked((x, z) => walls && !!kart?.insideBuilding(x, z));
+walkButton.addEventListener('click', () => { walkButton.blur(); if (controls.walking) controls.stopWalking(); else walkAt(null); });
+canvas.addEventListener('pointermove', (e) => { lastPointer = { x: e.clientX, y: e.clientY }; });
+canvas.addEventListener('dblclick', (e) => { if (e.altKey) walkAt({ x: e.clientX, y: e.clientY }); }); // plain double click still zooms
+addEventListener('keydown', (e) => {
+  if (e.target instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key === 'g' || e.key === 'G') { if (controls.walking) controls.stopWalking(); else walkAt(lastPointer); }
+  else if (e.key === 'Enter' && !controls.walking) walkAt(lastPointer);
+  else if (e.key === 'Escape' && controls.walking) controls.stopWalking();
+  else if ((e.key === 'b' || e.key === 'B') && controls.walking) { walls = !walls; walkHint.dataset.walls = String(walls); }
+});
 const screen = new Vector3();
 function busAt(clientX: number, clientY: number): Track | null {
   let best: Track | null = null, bestD = 18; // pixels
@@ -318,7 +355,7 @@ function lineAt(clientX: number, clientY: number): string | null {
 let down: { x: number; y: number } | null = null;
 canvas.addEventListener('pointerdown', (e) => { down = { x: e.clientX, y: e.clientY }; });
 canvas.addEventListener('pointerup', (e) => {
-  if (riding || !down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 5) return;
+  if (riding || controls.walking || !down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 5) return;
   const bus = busAt(e.clientX, e.clientY);
   if (bus) return choose({ bus: bus.bus.id });
   const stop = stopAt(e.clientX, e.clientY);
@@ -467,6 +504,7 @@ function frame(now: number): void {
     else controls.follow({ x: ridden.x, y: kart?.heightAt(ridden.x, ridden.z) ?? 0, z: ridden.z, bearing: ridden.bearing });
   }
   controls.update(dt);
+  syncWalk();
   kart?.update(camera, controls.target, now);
   liftLines();
   keepAbove();
@@ -479,7 +517,7 @@ function frame(now: number): void {
   (scene.fog as FogExp2).density = 0.00001 + 0.00002 * cloud + 0.00007 * Math.min(1, weather.precip / 2);
   {
     // The drops fall in a box that follows the camera: close around the seat, and over the middle of what is looked at otherwise.
-    const riding = controls.riding;
+    const riding = controls.firstPerson;
     const box = riding ? 70 : Math.min(900, Math.max(100, controls.distance * 1.3));
     boxCenter.copy(camera.position);
     if (!riding) boxCenter.lerp(controls.target, 0.5);

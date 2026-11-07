@@ -6,6 +6,7 @@
 // The state we ask for eases toward `want`; what we render is `now`.
 
 import { MathUtils, PerspectiveCamera, Raycaster, Vector2, Vector3 } from 'three';
+import { WalkInput, lookBy, lookDirection, startWalk, stepWalk, type Blocked, type WalkState } from './walk';
 
 export interface View { x: number; z: number; distance: number; yaw: number; elevation: number }
 
@@ -45,11 +46,17 @@ export class MapCamera {
   private heading = 0; // smoothed, radians
   private look = { yaw: 0, pitch: -0.04 }; // where the passenger looks, relative to the bus
   private seat = new Vector3();
+  /** While walking on the ground: where we stand and look. The orbit view (`want`/`now`) is left alone, to go back to. */
+  private walker: WalkState | null = null;
+  private readonly walkInput: WalkInput;
+  private blocked: Blocked | undefined;
 
   constructor(readonly camera: PerspectiveCamera, private readonly canvas: HTMLElement, start: View) {
     this.want = { ...start };
     this.now = { ...start };
     canvas.style.touchAction = 'none';
+    this.walkInput = new WalkInput(canvas);
+    this.walkInput.onLockLost = () => this.stopWalking();
     canvas.addEventListener('wheel', this.onWheel, { passive: false });
     canvas.addEventListener('pointerdown', this.onDown);
     canvas.addEventListener('pointermove', this.onMove);
@@ -61,6 +68,36 @@ export class MapCamera {
   }
 
   get riding(): boolean { return this.ridden !== null; }
+  get walking(): boolean { return this.walker !== null; }
+  /** Seen from a seat or from the ground: no distance to a target, so near/far and the like are set for a person. */
+  get firstPerson(): boolean { return this.ridden !== null || this.walker !== null; }
+  get walkPosition(): { x: number; z: number } | null { return this.walker ? { x: this.walker.x, z: this.walker.z } : null; }
+
+  /** Step down on the ground at `x, z` (looking `yaw` radians clockwise from north; the way the orbit camera looked by default). */
+  startWalking(x: number, z: number, yaw = this.now.yaw + Math.PI): void {
+    if (this.ridden) return;
+    this.walker = startWalk(x, z, yaw, this.ground);
+    this.walkInput.enable(true);
+    this.mode = null; this.pointers.clear();
+  }
+
+  /** Back to the orbit view we left: it floats up from where we stood. */
+  stopWalking(): void {
+    const w = this.walker;
+    if (!w) return;
+    this.walker = null;
+    this.walkInput.enable(false);
+    this.now = { x: w.x, z: w.z, distance: 8, yaw: w.yaw + Math.PI, elevation: 0.2 };
+  }
+
+  /** Whether walls stop the walker: pass a test for a place that cannot be stood on, or undefined to walk through everything. */
+  setBlocked(blocked: Blocked | undefined): void { this.blocked = blocked; }
+
+  /** The ground under a point of the screen, as the orbit camera sees it (null above the horizon). */
+  pickGround(clientX: number, clientY: number): { x: number; z: number } | null {
+    const p = this.groundAt(clientX, clientY);
+    return p ? { x: p.x, z: p.z } : null;
+  }
 
   /** Sit on a bus: call every frame with its place while riding, and with null to get off. */
   follow(bus: { x: number; y: number; z: number; bearing: number } | null): void {
@@ -86,6 +123,7 @@ export class MapCamera {
   /** Call every frame: eases toward what was asked, keeps the camera above the ground, and moves the real camera. */
   update(dt: number): void {
     if (this.ridden) return this.updateRide(dt);
+    if (this.walker) return this.updateWalk(dt);
     const k = 1 - Math.exp(-dt * 16);
     const n = this.now, w = this.want;
     n.x += (w.x - n.x) * k;
@@ -94,6 +132,18 @@ export class MapCamera {
     n.yaw += (w.yaw - n.yaw) * k;
     n.elevation += (w.elevation - n.elevation) * k;
     this.place();
+  }
+
+  private updateWalk(dt: number): void {
+    const [lx, ly] = this.walkInput.takeLook();
+    let w = lx || ly ? lookBy(this.walker!, lx, ly) : this.walker!;
+    w = stepWalk(w, this.walkInput.axes(), dt, this.ground, this.blocked);
+    this.walker = w;
+    const [dx, dy, dz] = lookDirection(w);
+    this.camera.position.set(w.x, w.eyeY, w.z);
+    this.camera.lookAt(w.x + dx * 10, w.eyeY + dy * 10, w.z + dz * 10);
+    this.target.set(w.x, this.ground(w.x, w.z), w.z); // the map loads the terrain around this
+    this.now.x = w.x; this.now.z = w.z;
   }
 
   private updateRide(dt: number): void {
@@ -180,17 +230,20 @@ export class MapCamera {
 
   private readonly onWheel = (e: WheelEvent): void => {
     e.preventDefault();
-    if (this.ridden) return;
+    if (this.firstPerson) return;
     const lines = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1;
     const delta = MathUtils.clamp(e.deltaY * lines, -240, 240);
     this.zoom(e.clientX, e.clientY, Math.exp(delta * (e.ctrlKey ? 0.01 : 0.0018))); // ctrl is the pinch of a trackpad
   };
 
   private readonly onDouble = (e: MouseEvent): void => {
-    if (this.ridden) return; this.zoom(e.clientX, e.clientY, e.shiftKey ? 2.5 : 0.4); };
+    if (this.firstPerson || e.altKey) return; // alt + double click is for standing on the ground (see main.ts)
+    this.zoom(e.clientX, e.clientY, e.shiftKey ? 2.5 : 0.4);
+  };
 
   private readonly onDown = (e: PointerEvent): void => {
     this.canvas.setPointerCapture(e.pointerId);
+    if (this.walker) return; // the walker has its own input
     this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (this.ridden) { this.mode = 'turn'; return; }
     if (this.pointers.size === 2) { this.startPinch(); return; }
@@ -256,7 +309,7 @@ export class MapCamera {
 
   private readonly onKey = (e: KeyboardEvent): void => {
     if (e.target instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
-    if (this.ridden) return;
+    if (this.firstPerson) return;
     const w = this.want, step = w.distance * 0.12;
     const forward = [-Math.sin(w.yaw), -Math.cos(w.yaw)], right = [Math.cos(w.yaw), -Math.sin(w.yaw)];
     const move = (f: number, r: number) => { w.x += forward[0] * step * f + right[0] * step * r; w.z += forward[1] * step * f + right[1] * step * r; };
