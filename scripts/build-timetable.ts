@@ -16,7 +16,9 @@ import { parseGtfsTime } from '../src/shared/time';
 import { TRIP_PREFIX, type TimetableFile } from '../src/shared/timetable';
 
 export const GTFS_URL = 'https://storage.googleapis.com/marduk-production/outbound/gtfs/rb_rut-aggregated-gtfs.zip';
-export const DEFAULT_LINES = ['20', '31', '63'];
+// Spread over Oslo and Bærum: 20 centre/west, 31 Fornebu-Grorud, 63 Romsås; 24 Fornebu-Brynseng, 46 north-west, 54 north,
+// 58 north-east, 70 south-east, 71 far south, 130 Sandvika-Skøyen.
+export const DEFAULT_LINES = ['20', '24', '31', '46', '54', '58', '63', '70', '71', '130'];
 const CACHE = 'data-cache/rut.zip';
 const OUT = 'public/data/timetable.json';
 /** Shapes are simplified to within this many meters of the original road geometry. */
