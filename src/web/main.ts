@@ -1,4 +1,4 @@
-import { Color, GridHelper, Line, LineBasicMaterial, BufferGeometry, Float32BufferAttribute, PerspectiveCamera, Scene, Vector3, WebGLRenderer, AdditiveBlending } from 'three';
+import { Color, FogExp2, GridHelper, Line, LineBasicMaterial, BufferGeometry, Float32BufferAttribute, PerspectiveCamera, Scene, Vector3, WebGLRenderer, AdditiveBlending } from 'three';
 import { MapCamera } from './mapcamera';
 import type { MapFile } from '../shared/map';
 import { buildBuildings, buildRoads } from './basemap';
@@ -11,6 +11,8 @@ import { linesAt, lineInfo, nextDepartures } from '../shared/departures';
 import { osloEpoch, osloTime } from '../shared/time';
 import { SkyDome } from './sky';
 import { applyLight, lightAt } from './daylight';
+import { WeatherFeed } from './weather';
+import { Precip } from './precip';
 
 const BUS_SIZE = 420; // meters across on the ground
 const STOP_SIZE = 70;
@@ -161,7 +163,12 @@ tidNow.addEventListener('click', () => setHour(null));
   if (m) { tidEl.value = String(Number(m[1]) * 60 + Number(m[2])); setHour(Number(tidEl.value)); } else showHour();
 }
 setInterval(() => { if (skyTime === null) showHour(); }, 30_000);
-const cloud = 0.25; // the weather is next: 0 clear, 1 overcast
+// The weather: cloud covers the sky and dulls the light, rain and snow fall around the camera, and the far hills fade into the haze.
+const weather = new WeatherFeed(new URLSearchParams(location.search).get('vaer'));
+const precip = new Precip();
+scene.add(precip.group);
+scene.fog = new FogExp2('#05070d', 0.00001);
+const boxCenter = new Vector3();
 
 // ---- camera ----
 const center = new Vector3((minX + maxX) / 2, 0, (minZ + maxZ) / 2);
@@ -463,8 +470,20 @@ function frame(now: number): void {
   kart?.update(camera, controls.target, now);
   liftLines();
   keepAbove();
+  weather.ease(dt);
+  const cloud = weather.gloom;
   const light = lightAt(skyTime ?? Date.now(), cloud);
   applyLight(light);
+  (scene.fog as FogExp2).color.copy(light.skyHorizon);
+  (scene.fog as FogExp2).density = 0.00001 + 0.00002 * cloud + 0.00007 * Math.min(1, weather.precip / 2);
+  {
+    // The drops fall in a box that follows the camera: close around the seat, and over the middle of what is looked at otherwise.
+    const riding = controls.riding;
+    const box = riding ? 70 : Math.min(900, Math.max(100, controls.distance * 1.3));
+    boxCenter.copy(camera.position);
+    if (!riding) boxCenter.lerp(controls.target, 0.5);
+    precip.update(now / 1000, boxCenter, box, weather.precip, weather.snow, weather.wind, (window.innerHeight * Math.min(window.devicePixelRatio, 2)) / (2 * Math.tan((camera.fov * Math.PI) / 360)));
+  }
   busModels.setLight(light.ambient, light.sunLight, light.sunPower, light.sunDir);
   camera.updateMatrixWorld();
   sky.update(camera, light, cloud, now / 1000);

@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { defineConfig, type Plugin } from 'vite';
 import { BusFeed } from './src/relay/buses';
 import { Timetable, type TimetableFile } from './src/shared/timetable';
+import { MET_URL, MET_USER_AGENT, reduceForecast } from './src/shared/weather';
 
 /** In development the relay runs inside the dev server: GET /feeds/buses, the same answer the Worker will give. */
 function devRelay(): Plugin {
@@ -11,6 +12,23 @@ function devRelay(): Plugin {
   return {
     name: 'oslo-buss-dev-relay',
     configureServer(server) {
+      // The weather, the same way as the Worker gives it, kept for half an hour.
+      let weather: { at: number; body: string } | null = null;
+      server.middlewares.use('/feeds/weather', async (_req, res) => {
+        res.setHeader('content-type', 'application/json');
+        try {
+          if (!weather || Date.now() - weather.at > 30 * 60_000) {
+            const r = await fetch(MET_URL, { headers: { 'user-agent': MET_USER_AGENT } });
+            const reduced = reduceForecast(await r.json(), Date.now());
+            if (!reduced) throw new Error('unexpected answer');
+            weather = { at: Date.now(), body: JSON.stringify(reduced) };
+          }
+          res.end(weather.body);
+        } catch (e) {
+          res.statusCode = 503;
+          res.end(JSON.stringify({ error: String(e) }));
+        }
+      });
       server.middlewares.use('/feeds/buses', async (_req, res) => {
         res.setHeader('content-type', 'application/json');
         if (!feed) {
