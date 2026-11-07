@@ -9,6 +9,7 @@ import {
 } from 'three';
 import { decodeTile, TILE_SIZE, tileName, type Tile, type XY } from '../shared/tiles';
 import { extrudeBlocks, type Block } from './basemap';
+import { daylit, daylitLine } from './daylight';
 import { upsample2 } from '../shared/terrain';
 import { rideColor, ASPHALT, GRAVEL, noise } from './terrainstyle';
 
@@ -55,9 +56,9 @@ export class KartverketMap {
   private readonly loading = new Set<string>();
   private readonly ready: Tile[] = [];
   private readonly materials: Material[] = [];
-  private readonly areaMaterials = AREA_COLORS.map((c) => new MeshBasicMaterial({ color: c, depthTest: false, depthWrite: false, side: DoubleSide }));
-  private readonly groundMaterial = new MeshBasicMaterial({ color: '#0b111c', depthTest: false, depthWrite: false, side: DoubleSide });
-  private readonly roadMaterials = ROAD_STYLE.map((s) => new LineBasicMaterial({ color: s.color, transparent: true, opacity: s.opacity }));
+  private readonly areaMaterials = AREA_COLORS.map((c) => daylit(new MeshBasicMaterial({ color: c, depthTest: false, depthWrite: false, side: DoubleSide })));
+  private readonly groundMaterial = daylit(new MeshBasicMaterial({ color: '#0b111c', depthTest: false, depthWrite: false, side: DoubleSide }));
+  private readonly roadMaterials = ROAD_STYLE.map((s) => daylitLine(new LineBasicMaterial({ color: s.color, transparent: true, opacity: s.opacity })));
   private checkedAt = 0;
   private ride = false;
   private readonly restyle: Loaded[] = [];
@@ -357,7 +358,7 @@ export class KartverketMap {
     geometry.setAttribute('position', new BufferAttribute(new Float32Array(pos), 3));
     geometry.setAttribute('color', new BufferAttribute(new Float32Array(col), 3));
     geometry.setIndex(new BufferAttribute(new Uint32Array(idx), 1));
-    const mesh = new Mesh(geometry, new MeshBasicMaterial({ vertexColors: true, side: DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+    const mesh = new Mesh(geometry, daylit(new MeshBasicMaterial({ vertexColors: true, side: DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 })));
     mesh.frustumCulled = true;
     return mesh;
   }
@@ -471,7 +472,7 @@ export class KartverketMap {
     geometry.setAttribute('position', new BufferAttribute(pos, 3));
     geometry.setAttribute('color', new BufferAttribute(col, 3));
     geometry.setIndex(new BufferAttribute(idx, 1));
-    return new Mesh(geometry, new MeshBasicMaterial({ vertexColors: true }));
+    return new Mesh(geometry, daylit(new MeshBasicMaterial({ vertexColors: true })));
   }
 }
 

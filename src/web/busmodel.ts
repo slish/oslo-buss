@@ -54,10 +54,19 @@ export class BusModels {
     this.mesh.renderOrder = 4;
     scene.add(this.mesh);
     // Light only for the buses: every other material in the scene ignores it.
-    scene.add(new AmbientLight('#ffffff', 1.3));
-    const sun = new DirectionalLight('#ffffff', 2.2);
-    sun.position.set(-0.55, 0.8, 0.83);
-    scene.add(sun);
+    scene.add(this.ambient, this.sun);
+  }
+
+  private readonly ambient = new AmbientLight('#ffffff', 1.3);
+  private readonly sun = new DirectionalLight('#ffffff', 2.2);
+
+  /** The light of the hour: the colour and strength of the sky and the sun, and where the sun is. */
+  setLight(ambient: Color, sunColor: Color, sunPower: number, dir: [number, number, number]): void {
+    this.ambient.color.copy(ambient);
+    this.ambient.intensity = 1;
+    this.sun.color.copy(sunColor);
+    this.sun.intensity = 2.4 * sunPower;
+    this.sun.position.set(dir[0], Math.max(0.15, dir[1]), dir[2]);
   }
 
   clear(): void { this.mesh.count = 0; }
