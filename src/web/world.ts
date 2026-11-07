@@ -8,5 +8,8 @@ export const toX = (lon: number) => (lon - ORIGIN.lon) * M_PER_DEG_LON;
 export const toZ = (lat: number) => -(lat - ORIGIN.lat) * M_PER_DEG_LAT;
 
 /** Colours of the lines, as RGB 0-1. Neon on a dark ground: the points are light, not paint. */
-export const LINE_COLORS: Record<string, string> = { '20': '#ffa51f', '31': '#2fc8ff', '63': '#ff4fa8' };
+export const LINE_COLORS: Record<string, string> = {
+  '20': '#ffa51f', '24': '#e86bff', '31': '#2fc8ff', '46': '#b48cff', '54': '#ffe14d',
+  '58': '#3dffc4', '63': '#ff4fa8', '70': '#ff6b4a', '71': '#5a7bff', '130': '#8cff5a',
+};
 export const colorOf = (line: string) => LINE_COLORS[line] ?? '#c8d2e6';
