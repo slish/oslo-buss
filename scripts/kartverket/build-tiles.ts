@@ -12,7 +12,8 @@ import { clipLine, clipRing, pointInRing, ringArea, type Rect } from './clip';
 import { HeightField, readFloatTiff } from './geotiff';
 import { field, lineStrings, members, surfaceRings } from './gml';
 import { cell, cellsOfTiles } from './osm';
-import { DOM_RES, DTM_BBOX, DTM_BLOCK, DTM_RES } from './download';
+import { DOM_RES, DTM_BBOX, DTM_BLOCK, DTM_RES, MUNICIPALITIES } from './download';
+import { neededTiles } from './coverage';
 
 export const CREDIT = 'Kartdata © Kartverket (CC BY 4.0), bygg òg © OpenStreetMap-bidragsytarar (ODbL)';
 
@@ -35,10 +36,16 @@ export const utm32Of = (x: number, z: number): XY => proj4('WGS84', 'EPSG:25832'
 
 // --- Tile store ---
 const tiles = new Map<string, Tile>();
+/** Tiles to keep: those of the previous build (Oslo and Bærum) and those the timetable needs (scripts/kartverket/coverage.ts). Data elsewhere in the neighbouring municipalities is dropped. */
+let keep: Set<string> | undefined;
+const scrap: Tile = { ix: 0, iz: 0, buildings: [], points: [], roads: [], areas: [] };
 const tileAt = (ix: number, iz: number) => {
   const k = `${ix},${iz}`;
   let t = tiles.get(k);
-  if (!t) tiles.set(k, (t = { ix, iz, buildings: [], points: [], roads: [], areas: [] }));
+  if (!t) {
+    if (keep && !keep.has(`${ix}_${iz}`)) { scrap.buildings = []; scrap.points = []; scrap.roads = []; scrap.areas = []; return scrap; }
+    tiles.set(k, (t = { ix, iz, buildings: [], points: [], roads: [], areas: [] }));
+  }
   return t;
 };
 const rectOf = (ix: number, iz: number): Rect => ({ x0: ix * TILE_SIZE, z0: iz * TILE_SIZE, x1: (ix + 1) * TILE_SIZE, z1: (iz + 1) * TILE_SIZE });
@@ -337,16 +344,30 @@ async function main() {
   dom = loadField('dom4', DOM_RES, DTM_BLOCK);
   const outlines: XY[][] = [];
   const x = join(SRC, 'x');
-  for (const [code, name, nvdb] of [['0301', 'Oslo', '0301NVDBVegnettPluss'], ['3201', 'Berum', '3201NVDBVegnettPluss']] as const) {
+  // The folder of each municipality has the name of the zip file, which the download names after the municipality ("Berum", "Nordre_Follo").
+  const folder = (prefix: string, code: string, suffix: string) => {
+    const f = readdirSync(x).find((d) => d.startsWith(`${prefix}_${code}_`) && d.endsWith(suffix));
+    if (!f) throw new Error(`${prefix}_${code}_*${suffix} is missing in ${x}: unzip the downloads into it`);
+    return f;
+  };
+  const places = MUNICIPALITIES.filter((m) => existsSync(x) && readdirSync(x).some((d) => d.startsWith(`Basisdata_${m.code}_`)));
+  const previous = existsSync(join(OUT, 'index.json')) ? Object.keys((JSON.parse(readFileSync(join(OUT, 'index.json'), 'utf8')) as TileIndex).tiles).map((n) => n.replace('.bin', '')) : [];
+  const needed = neededTiles();
+  keep = new Set([...previous, ...needed]);
+  console.log(`${previous.length} tiles from before, ${needed.size} needed by the timetable, ${keep.size} kept`);
+  for (const { code, name } of places) {
+    const n50 = folder('Basisdata', code, '_N50Kartdata_GML'), nvdb = folder('Samferdsel', code, '_NVDB-VegnettPluss_GML');
     console.log(`N50 ${name}`);
-    await readN50(join(x, `Basisdata_${code}_${name}_25832_N50Kartdata_GML`), `Basisdata_${code}_${name}_25832`, st, outlines);
+    await readN50(join(x, n50), n50.replace('_N50Kartdata_GML', ''), st, outlines);
     console.log(`NVDB ${name}`);
-    await readNvdb(join(x, `Samferdsel_${code}_${name}_5973_NVDB-VegnettPluss_GML`, `${nvdb}.gml`), st);
+    await readNvdb(join(x, nvdb, `${code}NVDBVegnettPluss.gml`), st);
   }
-  for (const [code, name] of [['0301', 'Oslo'], ['3201', 'Berum']]) {
+  for (const { code, name } of places) {
+    const dir = folder('Basisdata', code, '_MatrikkelenBygning_GML');
     console.log(`Bygningspunkt ${name}`);
-    await readPoints(join(x, `Basisdata_${code}_${name}_25832_MatrikkelenBygning_GML`, `Basisdata_${code}_${name}_25832_MatrikkelenBygning_GML.gml`), st, outlines);
+    await readPoints(join(x, dir, `${dir}.gml`), st, outlines);
   }
+  for (const t of keep) { const [ix, iz] = t.split('_').map(Number); tileAt(ix, iz); } // every needed tile exists, with at least its terrain
   if (!args.includes('--no-osm')) { console.log('OpenStreetMap outlines'); await mergeOsm(st); }
   console.log('terrain');
   addTerrain();

@@ -6,9 +6,15 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { pipeline } from 'node:stream/promises';
 import { Readable } from 'node:stream';
+import { blocksOf, neededTiles } from './coverage';
 
 const API = 'https://nedlasting.geonorge.no/api';
-const MUNICIPALITIES = [{ code: '0301', name: 'Oslo' }, { code: '3201', name: 'Bærum' }];
+/** Oslo and Bærum first; the others only reach the edges that the bus lines run to (Lillestrøm, Lørenskog, Rælingen, Nordre Follo, Ås, Nesodden). */
+export const MUNICIPALITIES = [
+  { code: '0301', name: 'Oslo' }, { code: '3201', name: 'Bærum' },
+  { code: '3205', name: 'Lillestrøm' }, { code: '3222', name: 'Lørenskog' }, { code: '3224', name: 'Rælingen' },
+  { code: '3207', name: 'Nordre Follo' }, { code: '3218', name: 'Ås' }, { code: '3212', name: 'Nesodden' },
+];
 const PAUSE_MS = 2000;
 /** Budget guard: the user allowed 5 GB in total. */
 const MAX_TOTAL_BYTES = 5 * 1024 ** 3;
@@ -83,8 +89,12 @@ async function orderAndDownload(ds: Dataset, area: { code: string; name: string 
 async function downloadWcs(sub: string, wcs: string, coverage: string, res: number, note: string) {
   const out = join(dir, sub);
   mkdirSync(out, { recursive: true });
-  for (let e = DTM_BBOX.minE; e < DTM_BBOX.maxE; e += DTM_BLOCK) {
-    for (let n = DTM_BBOX.minN; n < DTM_BBOX.maxN; n += DTM_BLOCK) {
+  // The original box (Oslo and Bærum) plus the blocks under the tiles the timetable needs (scripts/kartverket/coverage.ts).
+  const blocks = new Map<string, [number, number]>();
+  for (let e = DTM_BBOX.minE; e < DTM_BBOX.maxE; e += DTM_BLOCK) for (let n = DTM_BBOX.minN; n < DTM_BBOX.maxN; n += DTM_BLOCK) blocks.set(`${e},${n}`, [e, n]);
+  for (const b of blocksOf(neededTiles())) blocks.set(`${b[0]},${b[1]}`, b);
+  for (const [e, n] of blocks.values()) {
+    {
       const name = `${sub}_${e}_${n}.tif`;
       const file = join(out, name);
       if (existsSync(file) && statSync(file).size > 1000) continue;
