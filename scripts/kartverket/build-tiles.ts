@@ -31,7 +31,7 @@ const to25832 = proj4('EPSG:25832', 'WGS84');
 const to25833 = proj4('EPSG:25833', 'WGS84');
 const sceneOf = (conv: { forward(c: number[]): number[] }, e: number, n: number): XY => { const [lon, lat] = conv.forward([e, n]); return [toX(lon), toZ(lat)]; };
 /** The inverse of the above for UTM 32: scene meters to easting/northing. */
-const utm32Of = (x: number, z: number): XY => proj4('WGS84', 'EPSG:25832', [ORIGIN.lon + x / M_PER_DEG_LON, ORIGIN.lat - z / M_PER_DEG_LAT]) as XY;
+export const utm32Of = (x: number, z: number): XY => proj4('WGS84', 'EPSG:25832', [ORIGIN.lon + x / M_PER_DEG_LON, ORIGIN.lat - z / M_PER_DEG_LAT]) as XY;
 
 // --- Tile store ---
 const tiles = new Map<string, Tile>();
@@ -67,7 +67,7 @@ function addArea(cls: number, rings: XY[][]) {
 }
 
 // --- Heights: DTM and DOM blocks from the WCS downloads ---
-function loadField(sub: string, res: number, block: number): HeightField {
+export function loadField(sub: string, res: number, block: number): HeightField {
   const f = new HeightField(block, res, (h) => Number.isFinite(h) && h > -50 && h < 2500, DTM_BBOX.minE, DTM_BBOX.minN);
   const dir = join(SRC, sub);
   for (const name of existsSync(dir) ? readdirSync(dir) : []) {

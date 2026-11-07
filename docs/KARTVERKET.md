@@ -187,7 +187,7 @@ npm run dev                # opne http://localhost:5173/?kart=kartverket   (legg
 
 Flisene er ein ferdig bygd artefakt: dei krev ca. 1 GB nedlasta Kartverket-data og tung OSM-henting, så dei blir ikkje bygde i CI. I staden ligg dei på grenen `tiles` (éin ny commit kvar gong, som `data`-grenen), og `deploy.yml` hentar dei til `public/kartverket-tiles/` før bygget. Utan grenen bygger sida likevel, men utan fliser.
 
-Etter at du har bygd nye fliser lokalt (`npm run kartverket:tiles`):
+Etter at du har bygd nye fliser lokalt (`npm run kartverket:tiles`, og `npm run kartverket:fine` for det fine terrenget som blir brukt frå bussetet; det ligg i mappa `fine/` på grenen):
 
 ```bash
 npm run kartverket:publish   # pushar data-cache/tiles til grenen tiles

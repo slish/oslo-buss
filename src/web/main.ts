@@ -206,6 +206,7 @@ function ride(id: string | null): void {
   riding = id;
   for (const road of roads) road.visible = !id; // from the seat the colored lines and the glowing stops are only noise
   stops.points.visible = mark.points.visible = !id;
+  kart?.setRide(!!id);
   if (!id) controls.follow(null);
   showInfo();
 }

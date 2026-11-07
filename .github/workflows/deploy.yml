@@ -42,7 +42,9 @@ jobs:
         with:
           ref: tiles
           path: public/kartverket-tiles
-      - run: rm -rf public/kartverket-tiles/.git
+      - run: |
+          rm -rf public/kartverket-tiles/.git
+          if [ -d public/kartverket-tiles/fine ]; then mv public/kartverket-tiles/fine public/kartverket-tiles-fine; fi
       - run: npm run typecheck
       - run: npm test
       - run: npx vite build

@@ -9,8 +9,15 @@ import {
 } from 'three';
 import { decodeTile, TILE_SIZE, tileName, type Tile, type XY } from '../shared/tiles';
 import { extrudeBlocks, type Block } from './basemap';
+import { upsample2 } from '../shared/terrain';
+import { rideColor, ASPHALT, GRAVEL, noise } from './terrainstyle';
 
 const BASE = '/kartverket-tiles/';
+const FINE = '/kartverket-tiles-fine/'; // terrain-only tiles at 10 m, fetched near the bus when riding (see build-fine-terrain.ts)
+/** Typical widths in meters by road class (motorway ... residential, path, rail): the map has only the centre line. 0: no asphalt. */
+const ROAD_WIDTH = [12, 8, 7, 6, 5, 2.4, 0];
+const FINE_RADIUS = 600; // meters from the bus: tiles within this get the fine terrain
+const FINE_KEEP = 1500; // ... and keep it until farther than this
 /** Colours of the land cover classes (sea, water, farmland, marsh, forest, built, park): dim, the buses are the light. */
 const AREA_COLORS = ['#0a1f44', '#0e2d5a', '#16231a', '#142a2a', '#0e2c1c', '#1c2438', '#12301f'];
 /** Colour and opacity of the road classes (motorway ... residential, path, rail). */
@@ -30,6 +37,13 @@ interface Loaded {
   near: boolean;
   detail?: Object3D[];
   meshes: Object3D[];
+  terrainMesh?: Mesh;
+  /** The fine terrain (10 m, smoothed to 5 m), once it is there: heightAt reads it. */
+  fine?: { n: number; step: number; heights: Float32Array };
+  fineMesh?: Mesh;
+  /** Asphalt laid on the fine terrain: while it is there the thin road lines of the tile are hidden. */
+  asphalt?: Mesh;
+  fineState?: 'loading' | 'ready';
 }
 
 export interface KartOptions { terrain: boolean }
@@ -45,6 +59,9 @@ export class KartverketMap {
   private readonly groundMaterial = new MeshBasicMaterial({ color: '#0b111c', depthTest: false, depthWrite: false, side: DoubleSide });
   private readonly roadMaterials = ROAD_STYLE.map((s) => new LineBasicMaterial({ color: s.color, transparent: true, opacity: s.opacity }));
   private checkedAt = 0;
+  private ride = false;
+  private readonly restyle: Loaded[] = [];
+  private readonly fineReady: { l: Loaded; tile: Tile }[] = [];
   credit = '';
   /** Counts up whenever tiles come or go, for those who sample heightAt. */
   version = 0;
@@ -67,7 +84,8 @@ export class KartverketMap {
   heightAt(x: number, z: number): number {
     if (!this.options.terrain) return 0;
     const ix = Math.floor(x / TILE_SIZE), iz = Math.floor(z / TILE_SIZE);
-    const t = this.tiles.get(tileName(ix, iz))?.tile.terrain;
+    const loaded = this.tiles.get(tileName(ix, iz));
+    const t = loaded?.fine ?? loaded?.tile.terrain;
     if (!t) return 0;
     const fx = Math.min(t.n - 1.0001, Math.max(0, (x - ix * TILE_SIZE) / t.step)), fz = Math.min(t.n - 1.0001, Math.max(0, (z - iz * TILE_SIZE) / t.step));
     const i = Math.floor(fx), j = Math.floor(fz), tx = fx - i, tz = fz - j;
@@ -75,11 +93,103 @@ export class KartverketMap {
     return ((h(i, j) * (1 - tx) + h(i + 1, j) * tx) * (1 - tz) + (h(i, j + 1) * (1 - tx) + h(i + 1, j + 1) * tx) * tz) / 10;
   }
 
+  /**
+   * Seen from the seat of a bus the terrain gets another palette with variation and rock, and the tiles around the bus get the
+   * fine terrain. Set it with true when the ride begins and false when it ends.
+   */
+  setRide(on: boolean): void {
+    if (on === this.ride) return;
+    this.ride = on;
+    this.restyle.length = 0;
+    for (const l of this.tiles.values()) {
+      if (!on) this.dropFine(l);
+      if (l.terrainMesh) this.restyle.push(l);
+    }
+  }
+
+  private dropFine(l: Loaded): void {
+    if (l.fineMesh) {
+      l.group.remove(l.fineMesh);
+      l.fineMesh.geometry.dispose();
+      l.meshes.splice(l.meshes.indexOf(l.fineMesh), 1);
+      l.fineMesh = undefined;
+    }
+    if (l.asphalt) {
+      l.group.remove(l.asphalt);
+      l.asphalt.geometry.dispose();
+      l.meshes.splice(l.meshes.indexOf(l.asphalt), 1);
+      l.asphalt = undefined;
+      this.syncRoadLines(l);
+    }
+    if (l.fine) { l.fine = undefined; this.version++; }
+    l.fineState = undefined;
+    if (l.terrainMesh) l.terrainMesh.visible = true;
+  }
+
+  private async fetchFine(name: string, l: Loaded): Promise<void> {
+    l.fineState = 'loading';
+    try {
+      const r = await fetch(FINE + name);
+      if (!r.ok) throw new Error(String(r.status));
+      this.fineReady.push({ l, tile: decodeTile(new Uint8Array(await r.arrayBuffer())) });
+    } catch (e) {
+      console.warn('Kunne ikkje laste fint terreng', name, e);
+      l.fineState = 'ready'; // do not try again
+    }
+  }
+
+  /** Builds the fine terrain of a tile: 10 m samples made smooth at 5 m, with the same land cover colours at 10 m. */
+  private buildFine(l: Loaded, tile: Tile): void {
+    const t = tile.terrain;
+    if (!this.ride || !t || !this.tiles.has(tileName(l.tile.ix, l.tile.iz))) { l.fineState = undefined; return; }
+    const heights = upsample2(t.heights, t.n);
+    const n = 2 * t.n - 1, step = t.step / 2;
+    l.fine = { n, step, heights };
+    l.fineState = 'ready';
+    const mesh = this.gridMesh(l.tile, n, step, heights, 2);
+    l.group.add(mesh);
+    l.meshes.push(mesh);
+    l.fineMesh = mesh;
+    if (l.terrainMesh) l.terrainMesh.visible = false;
+    this.version++;
+    const asphalt = this.asphaltMesh(l.tile);
+    if (asphalt) { l.group.add(asphalt); l.meshes.push(asphalt); l.asphalt = asphalt; }
+    this.syncRoadLines(l);
+  }
+
+  /** The thin lines of the roads show only where there is no asphalt. */
+  private syncRoadLines(l: Loaded): void {
+    for (const o of l.meshes) if (o.userData.road) o.visible = !l.asphalt;
+  }
+
   /** Call every frame: it decides by itself when to fetch, build and release. */
   update(camera: Camera, target: Vector3, now: number): void {
     // One built tile per frame, so that panning does not stall.
     const t = this.ready.shift();
     if (t) this.build(t, camera);
+    else {
+      const f = this.fineReady.shift();
+      if (f) this.buildFine(f.l, f.tile);
+      else {
+        const r = this.restyle.shift();
+        if (r && this.tiles.get(tileName(r.tile.ix, r.tile.iz)) === r && r.terrainMesh) {
+          const old = r.terrainMesh, visible = old.visible;
+          r.group.remove(old); old.geometry.dispose(); r.meshes.splice(r.meshes.indexOf(old), 1);
+          r.terrainMesh = this.terrainMesh(r.tile) as Mesh;
+          r.terrainMesh.visible = visible;
+          r.group.add(r.terrainMesh); r.meshes.push(r.terrainMesh);
+        }
+      }
+    }
+    if (this.ride) {
+      let loading = 0;
+      for (const l of this.tiles.values()) if (l.fineState === 'loading') loading++;
+      for (const [name, l] of this.tiles) {
+        const d = Math.hypot((l.tile.ix + 0.5) * TILE_SIZE - target.x, (l.tile.iz + 0.5) * TILE_SIZE - target.z) - TILE_SIZE * 0.5; // about the distance to the edge of the tile
+        if (d > FINE_KEEP && (l.fine || l.fineMesh)) this.dropFine(l);
+        else if (d < FINE_RADIUS && !l.fineState && l.tile.terrain && loading < 2) { loading++; void this.fetchFine(name, l); }
+      }
+    }
     if (now - this.checkedAt < 250) return;
     this.checkedAt = now;
 
@@ -150,7 +260,7 @@ export class KartverketMap {
     this.tiles.set(name, l); // the terrain of this tile is needed for heightAt before the rest is built
     const add = (o: Object3D) => { l.group.add(o); l.meshes.push(o); return o; };
 
-    if (this.options.terrain && tile.terrain) add(this.terrainMesh(tile));
+    if (this.options.terrain && tile.terrain) { l.terrainMesh = this.terrainMesh(tile) as Mesh; add(l.terrainMesh); }
     else for (const m of this.areaMeshes(tile)) add(m);
     for (const m of this.roadMeshes(tile, false)) add(m);
     this.group.add(l.group);
@@ -167,6 +277,7 @@ export class KartverketMap {
     if (b) detail.push(b);
     for (const o of detail) { l.group.add(o); l.meshes.push(o); }
     l.detail = detail;
+    this.syncRoadLines(l);
   }
 
   /** Land cover as flat triangles, drawn first and in class order without depth, so that nothing fights. */
@@ -205,6 +316,52 @@ export class KartverketMap {
     return out;
   }
 
+  /**
+   * The roads of a tile as ribbons of asphalt laid on the terrain: each centre line gets the width of its class, a point every
+   * few meters with the ground height under both edges, and a hair of lift so it does not fight with the ground.
+   */
+  private asphaltMesh(tile: Tile): Mesh | undefined {
+    const pos: number[] = [], col: number[] = [], idx: number[] = [];
+    const color = new Color();
+    const STEP = 4, LIFT = 0.12;
+    for (const r of tile.roads) {
+      const width = ROAD_WIDTH[r.cls] ?? 0;
+      if (width <= 0 || r.points.length < 2) continue;
+      // Points along the line, no farther apart than STEP, so that the ribbon follows the terrain.
+      const pts: XY[] = [r.points[0]];
+      for (let i = 1; i < r.points.length; i++) {
+        const p = r.points[i - 1], q = r.points[i], len = Math.hypot(q[0] - p[0], q[1] - p[1]);
+        const parts = Math.max(1, Math.ceil(len / STEP));
+        for (let k = 1; k <= parts; k++) pts.push([p[0] + ((q[0] - p[0]) * k) / parts, p[1] + ((q[1] - p[1]) * k) / parts]);
+      }
+      const base = pos.length / 3;
+      const half = width / 2, paint = r.cls === 5 ? GRAVEL : ASPHALT;
+      for (let i = 0; i < pts.length; i++) {
+        const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)];
+        let tx = b[0] - a[0], tz = b[1] - a[1];
+        const len = Math.hypot(tx, tz) || 1;
+        tx /= len; tz /= len;
+        const nx = -tz, nz = tx, [x, z] = pts[i];
+        const shade = 0.88 + 0.24 * noise(x / 9, z / 9);
+        color.copy(paint).multiplyScalar(shade);
+        for (const side of [1, -1]) {
+          const ex = x + nx * half * side, ez = z + nz * half * side;
+          pos.push(ex, this.heightAt(ex, ez) + LIFT, ez);
+          col.push(color.r, color.g, color.b);
+        }
+        if (i > 0) { const k = base + i * 2; idx.push(k - 2, k, k - 1, k - 1, k, k + 1); }
+      }
+    }
+    if (!idx.length) return undefined;
+    const geometry = new BufferGeometry();
+    geometry.setAttribute('position', new BufferAttribute(new Float32Array(pos), 3));
+    geometry.setAttribute('color', new BufferAttribute(new Float32Array(col), 3));
+    geometry.setIndex(new BufferAttribute(new Uint32Array(idx), 1));
+    const mesh = new Mesh(geometry, new MeshBasicMaterial({ vertexColors: true, side: DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+    mesh.frustumCulled = true;
+    return mesh;
+  }
+
   private roadMeshes(tile: Tile, small: boolean): Object3D[] {
     const per: number[][] = ROAD_STYLE.map(() => []);
     const lift = this.options.terrain ? 1 : -1;
@@ -224,6 +381,7 @@ export class KartverketMap {
       const geometry = new BufferGeometry();
       geometry.setAttribute('position', new BufferAttribute(new Float32Array(positions), 3));
       const lines = new LineSegments(geometry, this.roadMaterials[cls]);
+      lines.userData.road = true;
       meshes.push(lines);
     });
     return meshes;
@@ -265,32 +423,54 @@ export class KartverketMap {
   /** The terrain model as a shaded mesh; areas are painted into its vertex colours. */
   private terrainMesh(tile: Tile): Object3D {
     const t = tile.terrain!;
+    return this.gridMesh(tile, t.n, t.step, t.heights, 1);
+  }
+
+  /**
+   * A mesh over a height grid (decimeters, n x n, `step` meters apart) of one tile. `colorEvery` is how many grid steps share one
+   * land cover lookup: the lookup is the slow part, the rest is cheap.
+   */
+  private gridMesh(tile: Tile, n: number, step: number, heights: ArrayLike<number>, colorEvery: number): Mesh {
     const ox = tile.ix * TILE_SIZE, oz = tile.iz * TILE_SIZE;
-    const pos = new Float32Array(t.n * t.n * 3), col = new Float32Array(t.n * t.n * 3);
+    const pos = new Float32Array(n * n * 3), col = new Float32Array(n * n * 3);
     const color = new Color();
-    for (let j = 0; j < t.n; j++) for (let i = 0; i < t.n; i++) {
-      const k = j * t.n + i, h = t.heights[k] / 10;
-      const x = ox + i * t.step, z = oz + j * t.step;
+    const clsGrid = new Int8Array(Math.ceil(n / colorEvery) * Math.ceil(n / colorEvery));
+    const cn = Math.ceil(n / colorEvery);
+    const clsAt = (i: number, j: number) => {
+      const ci = Math.floor(i / colorEvery), cj = Math.floor(j / colorEvery), k = cj * cn + ci;
+      if (!clsGrid[k]) {
+        // Edge samples are asked a hair inside the tile: the clipped land cover has no certain answer exactly on the border.
+        const x = Math.min(ox + TILE_SIZE - 0.05, Math.max(ox + 0.05, ox + ci * colorEvery * step)), z = Math.min(oz + TILE_SIZE - 0.05, Math.max(oz + 0.05, oz + cj * colorEvery * step));
+        clsGrid[k] = areaClassAt(tile, x, z) + 2; // 0 = not looked up yet; stored as class + 2, so "none" (-1) is 1
+      }
+      return clsGrid[k] - 2;
+    };
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+      const k = j * n + i, h = heights[k] / 10;
+      const x = ox + i * step, z = oz + j * step;
       pos.set([x, h, z], k * 3);
-      const i0 = Math.max(0, i - 1), i1 = Math.min(t.n - 1, i + 1), j0 = Math.max(0, j - 1), j1 = Math.min(t.n - 1, j + 1);
+      const i0 = Math.max(0, i - 1), i1 = Math.min(n - 1, i + 1), j0 = Math.max(0, j - 1), j1 = Math.min(n - 1, j + 1);
       // Slopes in meters per meter, one-sided at the edge of the tile, so that the tiles agree on the shade of their shared edge.
-      const dx = (t.heights[j * t.n + i1] - t.heights[j * t.n + i0]) / 10 / ((i1 - i0) * t.step);
-      const dz = (t.heights[j1 * t.n + i] - t.heights[j0 * t.n + i]) / 10 / ((j1 - j0) * t.step);
+      const dx = (heights[j * n + i1] - heights[j * n + i0]) / 10 / ((i1 - i0) * step);
+      const dz = (heights[j1 * n + i] - heights[j0 * n + i]) / 10 / ((j1 - j0) * step);
       // Light from the south-west: the same side as the walls.
       const shade = Math.min(1.6, Math.max(0.4, 1 + (dx * 0.55 - dz * 0.83) * 2.2));
-      // Edge samples are asked a hair inside the tile: the clipped land cover has no certain answer exactly on the border.
-      color.set(areaColorAt(tile, Math.min(ox + TILE_SIZE - 0.05, Math.max(ox + 0.05, x)), Math.min(oz + TILE_SIZE - 0.05, Math.max(oz + 0.05, z)))).multiplyScalar(shade);
+      const cls = clsAt(i, j);
+      if (this.ride) rideColor(color, cls, Math.hypot(dx, dz), x, z);
+      else color.set(cls < 0 ? '#0c1220' : AREA_COLORS[cls]);
+      color.multiplyScalar(shade);
       col.set([color.r, color.g, color.b], k * 3);
     }
-    const idx: number[] = [];
-    for (let j = 0; j + 1 < t.n; j++) for (let i = 0; i + 1 < t.n; i++) {
-      const a = j * t.n + i, b = a + 1, c = a + t.n, d = c + 1;
-      idx.push(a, c, b, b, c, d);
+    const idx = new Uint32Array((n - 1) * (n - 1) * 6);
+    let q = 0;
+    for (let j = 0; j + 1 < n; j++) for (let i = 0; i + 1 < n; i++) {
+      const a = j * n + i, b = a + 1, c = a + n, d = c + 1;
+      idx[q++] = a; idx[q++] = c; idx[q++] = b; idx[q++] = b; idx[q++] = c; idx[q++] = d;
     }
     const geometry = new BufferGeometry();
     geometry.setAttribute('position', new BufferAttribute(pos, 3));
     geometry.setAttribute('color', new BufferAttribute(col, 3));
-    geometry.setIndex(new BufferAttribute(new Uint16Array(idx), 1));
+    geometry.setIndex(new BufferAttribute(idx, 1));
     return new Mesh(geometry, new MeshBasicMaterial({ vertexColors: true }));
   }
 }
@@ -318,8 +498,8 @@ function inside(x: number, z: number, r: XY[]): boolean {
   return c;
 }
 
-/** The colour of the land cover at a point (the topmost class wins); the ground colour where nothing covers it. */
-function areaColorAt(tile: Tile, x: number, z: number): string {
+/** The land cover class at a point (the topmost wins), or -1 where nothing covers it. */
+function areaClassAt(tile: Tile, x: number, z: number): number {
   let cls = -1;
   for (const a of tile.areas) {
     if (a.cls < cls) continue;
@@ -327,5 +507,5 @@ function areaColorAt(tile: Tile, x: number, z: number): string {
     for (const r of a.rings) if (inside(x, z, r)) n++;
     if (n % 2 === 1) cls = a.cls;
   }
-  return cls < 0 ? '#0c1220' : AREA_COLORS[cls];
+  return cls;
 }
