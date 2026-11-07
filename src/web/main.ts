@@ -10,7 +10,7 @@ import { colorOf, toX, toZ } from './world';
 import { linesAt, lineInfo, nextDepartures } from '../shared/departures';
 import { osloEpoch, osloTime } from '../shared/time';
 import { SkyDome } from './sky';
-import { applyLight, lightAt } from './daylight';
+import { applyLight, applySnow, lightAt, snowCover } from './daylight';
 import { WeatherFeed } from './weather';
 import { Precip } from './precip';
 
@@ -474,6 +474,7 @@ function frame(now: number): void {
   const cloud = weather.gloom;
   const light = lightAt(skyTime ?? Date.now(), cloud);
   applyLight(light);
+  applySnow(snowCover(weather.temp));
   (scene.fog as FogExp2).color.copy(light.skyHorizon);
   (scene.fog as FogExp2).density = 0.00001 + 0.00002 * cloud + 0.00007 * Math.min(1, weather.precip / 2);
   {

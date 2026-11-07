@@ -9,7 +9,7 @@ import {
 } from 'three';
 import { decodeTile, TILE_SIZE, tileName, type Tile, type XY } from '../shared/tiles';
 import { extrudeBlocks, type Block } from './basemap';
-import { daylit, daylitLine } from './daylight';
+import { daylit, daylitLine, SNOW_BY_CLASS } from './daylight';
 import { upsample2 } from '../shared/terrain';
 import { rideColor, ASPHALT, GRAVEL, noise } from './terrainstyle';
 
@@ -56,7 +56,7 @@ export class KartverketMap {
   private readonly loading = new Set<string>();
   private readonly ready: Tile[] = [];
   private readonly materials: Material[] = [];
-  private readonly areaMaterials = AREA_COLORS.map((c) => daylit(new MeshBasicMaterial({ color: c, depthTest: false, depthWrite: false, side: DoubleSide })));
+  private readonly areaMaterials = AREA_COLORS.map((c, cls) => daylit(new MeshBasicMaterial({ color: c, depthTest: false, depthWrite: false, side: DoubleSide }), 'ground', SNOW_BY_CLASS[cls]));
   private readonly groundMaterial = daylit(new MeshBasicMaterial({ color: '#0b111c', depthTest: false, depthWrite: false, side: DoubleSide }));
   private readonly roadMaterials = ROAD_STYLE.map((s) => daylitLine(new LineBasicMaterial({ color: s.color, transparent: true, opacity: s.opacity })));
   private checkedAt = 0;
@@ -358,7 +358,7 @@ export class KartverketMap {
     geometry.setAttribute('position', new BufferAttribute(new Float32Array(pos), 3));
     geometry.setAttribute('color', new BufferAttribute(new Float32Array(col), 3));
     geometry.setIndex(new BufferAttribute(new Uint32Array(idx), 1));
-    const mesh = new Mesh(geometry, daylit(new MeshBasicMaterial({ vertexColors: true, side: DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 })));
+    const mesh = new Mesh(geometry, daylit(new MeshBasicMaterial({ vertexColors: true, side: DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }), 'ground', 0.3 /* ploughed: only a little snow stays on the asphalt */));
     mesh.frustumCulled = true;
     return mesh;
   }
@@ -433,7 +433,7 @@ export class KartverketMap {
    */
   private gridMesh(tile: Tile, n: number, step: number, heights: ArrayLike<number>, colorEvery: number): Mesh {
     const ox = tile.ix * TILE_SIZE, oz = tile.iz * TILE_SIZE;
-    const pos = new Float32Array(n * n * 3), col = new Float32Array(n * n * 3);
+    const pos = new Float32Array(n * n * 3), col = new Float32Array(n * n * 3), snowK = new Float32Array(n * n);
     const color = new Color();
     const clsGrid = new Int8Array(Math.ceil(n / colorEvery) * Math.ceil(n / colorEvery));
     const cn = Math.ceil(n / colorEvery);
@@ -461,6 +461,9 @@ export class KartverketMap {
       else color.set(cls < 0 ? '#0c1220' : AREA_COLORS[cls]);
       color.multiplyScalar(shade);
       col.set([color.r, color.g, color.b], k * 3);
+      // How much snow it takes: none on water, less in forest and on steep ground, where the rock shows.
+      const slope = Math.hypot(dx, dz), steep = Math.min(1, Math.max(0, (slope - 0.5) / 0.5));
+      snowK[k] = (cls < 0 ? 1 : SNOW_BY_CLASS[cls]) * (1 - 0.6 * steep);
     }
     const idx = new Uint32Array((n - 1) * (n - 1) * 6);
     let q = 0;
@@ -471,8 +474,9 @@ export class KartverketMap {
     const geometry = new BufferGeometry();
     geometry.setAttribute('position', new BufferAttribute(pos, 3));
     geometry.setAttribute('color', new BufferAttribute(col, 3));
+    geometry.setAttribute('snowK', new BufferAttribute(snowK, 1));
     geometry.setIndex(new BufferAttribute(idx, 1));
-    return new Mesh(geometry, daylit(new MeshBasicMaterial({ vertexColors: true })));
+    return new Mesh(geometry, daylit(new MeshBasicMaterial({ vertexColors: true }), 'terrain'));
   }
 }
 

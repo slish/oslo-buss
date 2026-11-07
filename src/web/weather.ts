@@ -1,5 +1,5 @@
 // The weather in the page: fetched from /feeds/weather every half hour and eased toward, so that a new number does not make the
-// sky jump. ?vaer=klart|sky|regn|sno sets a weather by hand, to look at it when the real one is dull.
+// sky jump. ?vaer=klart|sky|regn|sno|kulde sets a weather by hand, to look at it when the real one is dull.
 
 import type { Weather } from '../shared/weather';
 
@@ -8,6 +8,7 @@ const HAND: Record<string, Pick<Weather, 'cloud' | 'precip' | 'temp' | 'wind'>> 
   sky: { cloud: 0.8, precip: 0, temp: 6, wind: 3 },
   regn: { cloud: 1, precip: 3, temp: 8, wind: 5 },
   sno: { cloud: 1, precip: 2.5, temp: -3, wind: 2 },
+  kulde: { cloud: 0.15, precip: 0, temp: -12, wind: 1 },
 };
 
 export class WeatherFeed {
