@@ -87,26 +87,25 @@ function patch(material: Material, mode: 'tint' | 'walls'): void {
     shader.uniforms.uWindows = windowsUniform;
     if (mode === 'walls') {
       shader.vertexShader = shader.vertexShader
-        .replace('#include <common>', '#include <common>\nvarying vec3 vWorld;')
-        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+        .replace('#include <common>', '#include <common>\nattribute vec3 wall;\nvarying vec3 vWall;\nvarying float vHeight;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWall = wall;\nvHeight = (modelMatrix * vec4(transformed, 1.0)).y;');
     }
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>\nuniform vec3 uTint;\nuniform float uWindows;${mode === 'walls' ? '\nvarying vec3 vWorld;\nfloat hash3(vec3 p){ p = fract(p * 0.1031); p += dot(p, p.zyx + 31.32); return fract((p.x + p.y) * p.z); }' : ''}`)
+      .replace('#include <common>', `#include <common>\nuniform vec3 uTint;\nuniform float uWindows;${mode === 'walls' ? '\nvarying vec3 vWall;\nvarying float vHeight;\nfloat hash3(vec3 p){ p = fract(p * 0.1031); p += dot(p, p.zyx + 31.32); return fract((p.x + p.y) * p.z); }' : ''}`)
       .replace('#include <color_fragment>', `#include <color_fragment>
 diffuseColor.rgb *= uTint;${mode === 'walls' ? `
 {
-  // Walls (the surface stands steeply) get windows: a grid of 3 m by 3.2 m cells, some of them lit when it is dark.
-  vec3 n = normalize(cross(dFdx(vWorld), dFdy(vWorld)));
-  if (abs(n.y) < 0.4 && uWindows > 0.0) {
-    float along = vWorld.x * n.z - vWorld.z * n.x;
-    vec2 g = vec2(along / 3.0, vWorld.y / 3.2);
+  // Walls get windows: a grid of 3 m by 3.2 m cells, some of them lit when it is dark. The position along the wall comes from the
+  // building (a small number), not from the world, so that the pattern stays still when the camera moves.
+  if (vWall.y > 0.5 && uWindows > 0.0) {
+    vec2 g = vec2(vWall.x / 3.0, vHeight / 3.2);
     vec2 cell = floor(g), f = fract(g), fw = fwidth(g) + 1e-4;
     // Soft edges (one pixel wide), and far away, where a window is smaller than a pixel, the average of the pattern instead.
     float ax = smoothstep(0.2, 0.2 + fw.x, f.x) * (1.0 - smoothstep(0.8, 0.8 + fw.x, f.x));
     float ay = smoothstep(0.25, 0.25 + fw.y, f.y) * (1.0 - smoothstep(0.75, 0.75 + fw.y, f.y));
     float fade = 1.0 - smoothstep(0.3, 0.8, max(fw.x, fw.y));
-    float lit = step(1.0 - 0.45 * uWindows, hash3(vec3(cell, floor(vWorld.x / 40.0) + 3.0 * floor(vWorld.z / 40.0))));
-    float warm = hash3(vec3(cell.yx, 7.0));
+    float lit = step(1.0 - 0.45 * uWindows, hash3(vec3(cell, floor(vWall.z + 0.5))));
+    float warm = hash3(vec3(cell.yx, 7.0 + floor(vWall.z + 0.5)));
     vec3 glow = mix(vec3(1.0, 0.74, 0.38), vec3(0.95, 0.9, 0.7), warm);
     float on = mix(0.3 * 0.45 * uWindows, ax * ay * lit, fade);
     diffuseColor.rgb = mix(diffuseColor.rgb, glow * 1.4, on * uWindows);
