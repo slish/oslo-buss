@@ -178,7 +178,6 @@ export class KartverketMap {
     ground.setIndex([0, 1, 2, 0, 2, 3]);
     const base = new Mesh(ground, this.groundMaterial);
     base.renderOrder = -20;
-    base.frustumCulled = false;
     out.push(base);
     const per: { pos: number[]; idx: number[] }[] = AREA_COLORS.map(() => ({ pos: [], idx: [] }));
     for (const a of tile.areas) {
@@ -200,7 +199,6 @@ export class KartverketMap {
       geometry.setIndex(new BufferAttribute(g.pos.length / 3 > 65535 ? new Uint32Array(g.idx) : new Uint16Array(g.idx), 1));
       const mesh = new Mesh(geometry, this.areaMaterials[cls]);
       mesh.renderOrder = -10 + cls;
-      mesh.frustumCulled = false;
       out.push(mesh);
     });
     return out;
@@ -225,7 +223,6 @@ export class KartverketMap {
       const geometry = new BufferGeometry();
       geometry.setAttribute('position', new BufferAttribute(new Float32Array(positions), 3));
       const lines = new LineSegments(geometry, this.roadMaterials[cls]);
-      lines.frustumCulled = false;
       meshes.push(lines);
     });
     return meshes;
@@ -241,7 +238,10 @@ export class KartverketMap {
     for (const p of tile.points) {
       blocks.push({ ring: [[p.x - h, p.z - h], [p.x + h, p.z - h], [p.x + h, p.z + h], [p.x - h, p.z + h]], height: p.height / 10, base: this.heightAt(p.x, p.z), quad: true });
     }
-    return blocks.length ? extrudeBlocks(blocks) : undefined;
+    if (!blocks.length) return undefined;
+    const mesh = extrudeBlocks(blocks);
+    mesh.frustumCulled = true; // a tile is a bounding sphere: the tiles behind the camera cost nothing
+    return mesh;
   }
 
   /** The terrain model as a shaded mesh; areas are painted into its vertex colours. */
@@ -273,9 +273,7 @@ export class KartverketMap {
     geometry.setAttribute('position', new BufferAttribute(pos, 3));
     geometry.setAttribute('color', new BufferAttribute(col, 3));
     geometry.setIndex(new BufferAttribute(new Uint16Array(idx), 1));
-    const mesh = new Mesh(geometry, new MeshBasicMaterial({ vertexColors: true }));
-    mesh.frustumCulled = false;
-    return mesh;
+    return new Mesh(geometry, new MeshBasicMaterial({ vertexColors: true }));
   }
 }
 

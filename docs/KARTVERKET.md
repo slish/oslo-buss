@@ -166,6 +166,14 @@ npm run dev                # opne http://localhost:5173/?kart=kartverket   (legg
 - `&terreng=1`: terrenget er eit skugga mesh med arealfarge i vertekssfargane; vegar, bygg, bussar, haldeplassar og linjene til bussane følgjer høgda (`heightAt`). Flat modus er standard.
 - Målt i Browser-ruta i Claude (maskin utan eigen GPU-måling): 60 fps både i oversynsbiletet (90 fliser) og i nærbilete i Oslo sentrum med terreng. Bygging per flis: terreng ≈ 30 ms, bygg ≈ 11 ms, areal ≈ 2 ms.
 
+### Kamera og 3D-bussar (gjeld òg standardkartet)
+
+- Kameraet kan zoome ned til 20 m (`minDistance`), nesten ned til horisonten (`maxPolarAngle` 0,495π) og zoome mot peikaren (`zoomToCursor`). `near`/`far` følgjer avstanden (near 0,5–100 m, far 20–400 km) så ingenting klipper nær bakken.
+- I terrengmodus held kameraet og målpunktet seg over terrenget (`keepAbove` i `main.ts`).
+- Nærare enn 1,5 km frå kameraet toner det lysande punktet ut medan ein enkel lågpoly-buss (12×3×2,5 m i linjefargen, `src/web/busmodel.ts`, éin `InstancedMesh`) toner inn; heilt modell innanfor 700 m. Bussen er vend etter retninga og følgjer terrenget (også stigning) i terrengmodus. Vald buss er lysare og beheld ein liten glød. Klikk og infopanel fungerer som før. Haldeplassmarkørane (70 m store skiver) krympar når ein zoomar inn.
+- Fliser for bygg/vegar blir frustum-kulla per flis; utan det fall fps til ca. 25 med dei fulle OSM-flisene i nærvising, no 56–60 i Browser-ruta.
+- Kjent: ein buss kan ligge inne i eit bygg i OSM/N50-data (t.d. bussterminal under bygg), og då ser ein berre gløden.
+
 ## Neste steg
 
 1. Ta med fleire N50-areal (flyplass, bart fjell, steinbrot) så «uklassifisert land» forsvinn.

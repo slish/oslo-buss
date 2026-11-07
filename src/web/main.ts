@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { MapFile } from '../shared/map';
 import { buildBuildings, buildRoads } from './basemap';
 import { Glow } from './glow';
+import { BusModels, BUS_LENGTH, modelness } from './busmodel';
 import { BusStore, type Track } from './store';
 import type { KartverketMap } from './kartverket';
 import { colorOf, toX, toZ } from './world';
@@ -73,6 +74,7 @@ scene.add(stops.points);
 const buses = new Glow(512, 9);
 buses.points.renderOrder = 3;
 scene.add(buses.points);
+const busModels = new BusModels(scene);
 
 // ---- the map under it all: roads and buildings from OpenStreetMap, loaded once the lights are on ----
 // ?kart=kartverket draws Kartverket's tiles instead (dev server only, see docs/KARTVERKET.md); &terreng=1 follows the terrain.
@@ -113,12 +115,32 @@ camera.position.set(center.x, span * 0.95, center.z + span * 0.75);
 const controls = new OrbitControls(camera, canvas);
 controls.target.copy(center);
 controls.enableDamping = true;
-controls.maxPolarAngle = Math.PI * 0.46;
-controls.minDistance = 600;
+controls.maxPolarAngle = Math.PI * 0.495; // almost down to the horizon
+controls.minDistance = 20; // close to the ground, where the buses are models
+controls.zoomToCursor = true;
 controls.maxDistance = 120_000;
 controls.update();
 // For looking at the scene from the console while developing: window.__oslo.camera, .controls, .toX, .toZ.
-if (import.meta.env.DEV) Object.assign(window, { __oslo: { camera, controls, toX, toZ } });
+if (import.meta.env.DEV) Object.assign(window, { __oslo: { camera, controls, toX, toZ, store } });
+
+/** Keeps the camera and its target above the ground (the terrain with ?terreng=1), and near/far in proportion to the distance, so that nothing is clipped close up. */
+let nearNow = 0, farNow = 0;
+let stopShrink = 1; // the markers of the stops are 70 m discs: close up they shrink with the distance, so they do not cover the street
+function keepAbove(): void {
+  const ground = (x: number, z: number) => kart?.heightAt(x, z) ?? 0;
+  const lift = Math.max(0, ground(controls.target.x, controls.target.z) - controls.target.y);
+  if (lift > 0) { controls.target.y += lift; camera.position.y += lift; }
+  const low = ground(camera.position.x, camera.position.z) + 2.5 - camera.position.y;
+  if (low > 0) camera.position.y += low;
+  const dist = camera.position.distanceTo(controls.target);
+  const shrink = Math.min(1, Math.max(0.06, dist / 2500));
+  if (Math.abs(shrink - stopShrink) > 0.01) { stopShrink = shrink; resize(); }
+  const near = Math.min(100, Math.max(0.5, dist * 0.01)), far = Math.min(400_000, Math.max(20_000, dist * 8));
+  if (Math.abs(near / nearNow - 1) > 0.03 || Math.abs(far / farNow - 1) > 0.03) {
+    nearNow = camera.near = near; farNow = camera.far = far;
+    camera.updateProjectionMatrix();
+  }
+}
 
 function resize(): void {
   const ratio = Math.min(window.devicePixelRatio, 2);
@@ -128,7 +150,7 @@ function resize(): void {
   camera.updateProjectionMatrix();
   const pixelsPerMeter = (window.innerHeight * ratio) / (2 * Math.tan((FOV * Math.PI) / 360));
   buses.setScale(pixelsPerMeter, ratio, 9);
-  stops.setScale(pixelsPerMeter, ratio, 2);
+  stops.setScale(pixelsPerMeter * stopShrink, ratio, 2);
 }
 window.addEventListener('resize', resize);
 resize();
@@ -150,7 +172,7 @@ function busAt(clientX: number, clientY: number): Track | null {
   let best: Track | null = null, bestD = 18; // pixels
   for (const t of store.tracks.values()) {
     if (t.leaving) continue;
-    screen.set(t.x, 0, t.z).project(camera);
+    screen.set(t.x, (kart?.heightAt(t.x, t.z) ?? 0) + 3, t.z).project(camera);
     if (screen.z > 1) continue;
     const d = Math.hypot((screen.x * 0.5 + 0.5) * window.innerWidth - clientX, (-screen.y * 0.5 + 0.5) * window.innerHeight - clientY);
     if (d < bestD) { best = t; bestD = d; }
@@ -223,15 +245,31 @@ function frame(now: number): void {
   last = now;
   store.tick(dt);
   buses.clear();
+  busModels.clear();
   for (const t of store.tracks.values()) {
     tmp.set(colorOf(t.bus.line));
     const chosen = t.bus.id === selected;
-    buses.add(t.x, 6 + (kart?.heightAt(t.x, t.z) ?? 0), t.z, tmp, chosen ? BUS_SIZE * 1.8 : BUS_SIZE, t.alpha * (t.bus.live ? 1 : 0.5));
+    const ground = kart?.heightAt(t.x, t.z) ?? 0;
+    // Close to the camera the light gives way to the model of the bus, smoothly; the chosen bus keeps a small halo.
+    const m = modelness(Math.hypot(camera.position.x - t.x, camera.position.y - ground, camera.position.z - t.z));
+    const alpha = t.alpha * (t.bus.live ? 1 : 0.5);
+    const size = (chosen ? BUS_SIZE * 1.8 : BUS_SIZE) * (1 - 0.92 * m);
+    buses.add(t.x, 6 + ground, t.z, tmp, chosen ? Math.max(size, 30) : size, alpha * (1 - (chosen ? 0.7 : 0.85) * m));
+    if (m > 0) {
+      let pitch = 0;
+      if (kart?.options.terrain) {
+        const b = (t.bearing * Math.PI) / 180, hx = Math.sin(b) * BUS_LENGTH / 2, hz = -Math.cos(b) * BUS_LENGTH / 2;
+        pitch = Math.atan2(kart.heightAt(t.x + hx, t.z + hz) - kart.heightAt(t.x - hx, t.z - hz), BUS_LENGTH);
+      }
+      busModels.add(t.x, ground + 0.2, t.z, t.bearing, pitch, tmp, m * Math.max(0.2, t.alpha), chosen ? 1.5 : 0.9);
+    }
   }
+  busModels.commit();
   buses.commit();
   controls.update();
   kart?.update(camera, controls.target, now);
   liftLines();
+  keepAbove();
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
 }
