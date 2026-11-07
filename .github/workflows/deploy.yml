@@ -35,6 +35,14 @@ jobs:
           node-version: lts/*
           cache: npm
       - run: npm ci
+      # Kartverket tiles are a finished artifact on the `tiles` branch (npm run kartverket:publish). Without the branch the site still builds.
+      - uses: actions/checkout@v7
+        id: tiles
+        continue-on-error: true
+        with:
+          ref: tiles
+          path: public/kartverket-tiles
+      - run: rm -rf public/kartverket-tiles/.git
       - run: npm run typecheck
       - run: npm test
       - run: npx vite build

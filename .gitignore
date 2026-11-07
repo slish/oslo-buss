@@ -5,3 +5,4 @@ data-cache/
 dist/
 node_modules/
 public/data/timetable.json
+public/kartverket-tiles/

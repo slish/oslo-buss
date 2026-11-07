@@ -77,14 +77,24 @@ scene.add(buses.points);
 const busModels = new BusModels(scene);
 
 // ---- the map under it all: roads and buildings from OpenStreetMap, loaded once the lights are on ----
-// ?kart=kartverket draws Kartverket's tiles instead (dev server only, see docs/KARTVERKET.md); &terreng=1 follows the terrain.
+// ?kart=kartverket draws Kartverket's tiles instead (see docs/KARTVERKET.md); &terreng=1 follows the terrain. The buttons set the flags.
 const params = new URLSearchParams(location.search);
+const useKart = params.get('kart') === 'kartverket';
+const useTerrain = useKart && params.get('terreng') === '1';
+function flag(button: string, pressed: boolean, change: (p: URLSearchParams) => void): void {
+  const el = document.querySelector<HTMLButtonElement>(button)!;
+  el.setAttribute('aria-pressed', String(pressed));
+  el.addEventListener('click', () => { const p = new URLSearchParams(location.search); change(p); location.search = p.toString(); });
+}
+flag('#opt-kart', useKart, (p) => { if (useKart) { p.delete('kart'); p.delete('terreng'); } else p.set('kart', 'kartverket'); });
+flag('#opt-terreng', useTerrain, (p) => { if (useTerrain) p.delete('terreng'); else { p.set('kart', 'kartverket'); p.set('terreng', '1'); } });
+document.querySelector<HTMLElement>('#credit-kartverket')!.hidden = !useKart;
 let kart: KartverketMap | undefined;
-if (params.get('kart') === 'kartverket') {
+if (useKart) {
   void (async () => {
     try {
       const { KartverketMap } = await import('./kartverket');
-      const k = new KartverketMap({ terrain: params.get('terreng') === '1' });
+      const k = new KartverketMap({ terrain: useTerrain });
       await k.start();
       scene.add(k.group);
       scene.remove(grid);

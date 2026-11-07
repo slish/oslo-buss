@@ -13,6 +13,10 @@
       <h1>Oslo-buss</h1>
       <p id="status">Hentar bussar…</p>
       <ul id="legend"></ul>
+      <div id="options" role="group" aria-label="Val for kartet">
+        <button id="opt-kart" type="button" aria-pressed="false">Kartverket-kart</button>
+        <button id="opt-terreng" type="button" aria-pressed="false">Terreng</button>
+      </div>
     </header>
     <aside id="info" hidden></aside>
     <footer>
@@ -20,6 +24,7 @@
       Inneholder data under <a href="https://data.norge.no/nlod/en/2.0" target="_blank" rel="noopener">Norsk lisens for offentlige data (NLOD)</a>
       tilgjengeliggjort av Entur AS. Dataene er bearbeidet: posisjonar er berekna frå rutetabell og sanntidsforseinkingar, ikkje målte.
       Kart © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap-bidragsytarar</a> (ODbL).
+      <span id="credit-kartverket" hidden>Kartdata © <a href="https://www.kartverket.no/api-og-data/vilkar-for-bruk" target="_blank" rel="noopener">Kartverket</a> (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>); høgder og enkelte bygg er berekna frå Kartverkets høgdemodell.</span>
     </footer>
     <script type="module" src="/src/web/main.ts"></script>
   </body>
