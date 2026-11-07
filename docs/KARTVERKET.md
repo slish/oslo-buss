@@ -102,23 +102,23 @@ Brukartest av visaren: bygga såg betre ut i standardkartet (OSM) enn i Kartverk
 
 Difor er OSM-omriss no hovudkjelde for bygg der dei finst (`scripts/kartverket/osm.ts` hentar, `mergeOsm` i `build-tiles.ts` flettar). N50-omriss og punkt blir berre behaldne der OSM manglar: eit N50-omriss blir droppa viss tyngdepunktet ligg i eit OSM-omriss eller eit OSM-tyngdepunkt ligg i det, og eit punkt blir droppa viss det ligg inne i eller innan 4 m frå eit OSM-omriss. Høgd: `height`/`building:levels` frå OSM (`heightSource` 2), elles DOM−DTM (1), elles gjetting etter taggen (0). OSM-omriss ligg i eigen flisseksjon (id 6, same oppbygging som bygg frå N50) slik at ODbL og CC BY held seg skilde. Ho blir lesen inn som `osm: true`.
 
-Resultat med dei OSM-cellene som er lasta ned (`index.json`-kreditlinja nemner både Kartverket og OSM):
+Resultat med alle 213 OSM-celler for Oslo og Bærum (221 994 bygningsomriss henta; 182 740 av dei ligg innanfor flisområdet etter filtrering på areal ≥ 15 m²):
 
-| | Før | Med OSM |
+| | Før | Med OSM (full dekning) |
 |---|---|---|
-| Samla storleik rått / gzip / brotli | 6,96 / 5,39 / 4,97 MB | 8,41 / 6,66 / 6,14 MB |
-| Flis median / maks (rått) | 17,7 / 117 kB | 17,7 / 200 kB |
-| Bygg som flater | 5 367 | 80 834 OSM + 2 322 N50 |
-| Bygningspunkt (boksar) | 173 822 | 97 892 (75 930 droppa) |
-| OSM-høgd frå tagg / modell / gjetta | – | 19 620 / 54 208 / 7 006 |
+| Samla storleik rått / gzip / brotli | 6,96 / 5,39 / 4,97 MB | 10,22 / 8,22 / 7,57 MB |
+| Flis median / maks (rått) | 17,7 / 117 kB | 19,2 / 200 kB |
+| Bygg som flater | 5 367 | 182 740 OSM + 341 N50 |
+| Bygningspunkt (boksar) | 173 822 | 15 381 (158 441 droppa) |
+| OSM-høgd frå tagg / modell / gjetta | – | 29 210 / 134 732 / 18 798 |
 
-**Dekning er ufullstendig.** Overpass svarar svært sakte (504, 2–5 minutt per celle), så berre cellene langs bussrutene (gjenbrukte frå `data-cache/osm/`) og dei fire første nye cellene er med; resten av dei 213 cellene for Oslo og Bærum manglar enno, og der blir det som før (N50 + punkt-boksar). `npx tsx scripts/kartverket/osm.ts` hentar resten (kvar celle éin gong, kan stoppast og startast om att), deretter `npx tsx scripts/kartverket/build-tiles.ts`.
+**Dekning:** alle cellene er henta (`data-cache/osm-buildings/`, 187 nye pluss 26 frå `data-cache/osm/`). Overpass var sakte (502/504), men skriptet prøvde på nytt av seg sjølv, og det tok nokre timar. Dei attverande 15 381 boksane er register-bygg utan OSM-omriss.
 
 Kva som framleis er dårlegare enn standardkartet: OSM multipolygon-bygg (relasjonar, t.d. bygg med gardsrom) er ikkje med, berre enkle ways; bygg utan omriss i OSM er framleis punkt-boksar; OSM-høgdene er like usikre som før der taggen manglar (DOM−DTM).
 
 ### Statiske filer eller R2
 
-Tala er langt under Cloudflare-grensene for statiske filer: 219 filer (grense 20 000) og største fil 117 kB, 200 kB med OSM-bygg (grense 25 MiB). Totalt 7 MB rått; Cloudflare komprimerer statiske filer (gzip/brotli) når nettlesaren ber om det, så overføring er ca. 5 MB for *alt*, og nettlesaren hentar berre flisene rundt kameraet.
+Tala er langt under Cloudflare-grensene for statiske filer: 219 filer (grense 20 000) og største fil 117 kB, 200 kB med OSM-bygg (grense 25 MiB). Totalt 10 MB rått; Cloudflare komprimerer statiske filer (gzip/brotli) når nettlesaren ber om det, så overføring er ca. 8 MB gzip (7,6 MB brotli) for *alt*, og nettlesaren hentar berre flisene rundt kameraet.
 
 **Tilråding: statiske filer** i same publisering. Ingen ekstra tenestar, ingen CORS eller tilgangsstyring, og same pipeline som resten. Filene er innhaldsadresserte hos Cloudflare, så berre endra fliser blir lasta opp på nytt ved ny publisering. R2 blir først aktuelt om flisene veks mykje (t.d. 1 m-terreng eller 3D-bygg med takform) og talet på filer nærmar seg 20 000 eller enkeltfiler 25 MiB; dagens fliser kan vekse fleire titals gonger før det skjer. Ulempe med statisk: kvar kartoppdatering krev ny publisering.
 
