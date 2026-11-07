@@ -32,3 +32,10 @@ footer a { color: #9db4dd; pointer-events: auto; }
 #info .dep .time { color: var(--ink); font-variant-numeric: tabular-nums; }
 #info .dep .line { font-weight: 700; }
 #info .source { margin-top: 6px; font-size: 11px; }
+#legend { max-height: calc(100vh - 300px); overflow-y: auto; pointer-events: auto; padding-right: 6px; scrollbar-width: thin; }
+#legend li { cursor: pointer; }
+#legend li.off { opacity: 0.3; }
+#legend li.off .dot { box-shadow: none; }
+#lines-toggle { margin: 6px 0 0; pointer-events: auto; font-size: 11px; }
+#lines-toggle button { font: inherit; color: var(--dim); background: none; border: 0; padding: 0 6px 0 0; cursor: pointer; text-decoration: underline; }
+#lines-toggle button:hover { color: var(--ink); }
