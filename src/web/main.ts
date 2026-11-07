@@ -4,6 +4,7 @@ import type { MapFile } from '../shared/map';
 import { buildBuildings, buildRoads } from './basemap';
 import { Glow } from './glow';
 import { BusStore, type Track } from './store';
+import type { KartverketMap } from './kartverket';
 import { colorOf, toX, toZ } from './world';
 
 const BUS_SIZE = 420; // meters across on the ground
@@ -31,6 +32,7 @@ try {
 const file = store.timetable.file;
 
 // ---- the roads of the lines and their stops ----
+const shapeLines: { position: Float32BufferAttribute }[] = [];
 const lineOfShape = new Map<string, string>();
 for (const p of file.patterns) lineOfShape.set(p.shape, file.lines[p.line].name);
 
@@ -43,7 +45,9 @@ for (const [id, shape] of store.timetable.shapes) {
     minX = Math.min(minX, x); maxX = Math.max(maxX, x); minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z);
   }
   const geometry = new BufferGeometry();
-  geometry.setAttribute('position', new Float32BufferAttribute(points, 3));
+  const position = new Float32BufferAttribute(points, 3);
+  geometry.setAttribute('position', position);
+  shapeLines.push({ position });
   const material = new LineBasicMaterial({ color: colorOf(lineOfShape.get(id) ?? ''), transparent: true, opacity: 0.5, blending: AdditiveBlending, depthWrite: false, depthTest: false });
   const road = new Line(geometry, material);
   road.renderOrder = 1; // after the map, whatever the buildings in between: the lights show through
@@ -66,7 +70,26 @@ buses.points.renderOrder = 3;
 scene.add(buses.points);
 
 // ---- the map under it all: roads and buildings from OpenStreetMap, loaded once the lights are on ----
-void (async () => {
+// ?kart=kartverket draws Kartverket's tiles instead (dev server only, see docs/KARTVERKET.md); &terreng=1 follows the terrain.
+const params = new URLSearchParams(location.search);
+let kart: KartverketMap | undefined;
+if (params.get('kart') === 'kartverket') {
+  void (async () => {
+    try {
+      const { KartverketMap } = await import('./kartverket');
+      const k = new KartverketMap({ terrain: params.get('terreng') === '1' });
+      await k.start();
+      scene.add(k.group);
+      scene.remove(grid);
+      kart = k;
+      if (import.meta.env.DEV) Object.assign((window as unknown as { __oslo: object }).__oslo, { kart: k });
+    } catch (e) {
+      console.warn('Kunne ikkje laste Kartverket-fliser', e);
+      statusEl.textContent = e instanceof Error ? e.message : String(e);
+      statusEl.classList.add('warn');
+    }
+  })();
+} else void (async () => {
   try {
     const response = await fetch('/data/map.json');
     if (!response.ok) return; // the map is optional: without it the lines and buses still show
@@ -179,6 +202,16 @@ store.start();
 // ---- the loop ----
 const tmp = new Color();
 let last = performance.now();
+let liftedAt = -1;
+/** With ?terreng=1 the lines of the buses follow the terrain too, as the tiles come in. */
+function liftLines(): void {
+  if (!kart || !kart.options.terrain || kart.version === liftedAt) return;
+  liftedAt = kart.version;
+  for (const { position } of shapeLines) {
+    for (let i = 0; i < position.count; i++) position.setY(i, kart.heightAt(position.getX(i), position.getZ(i)) + 3);
+    position.needsUpdate = true;
+  }
+}
 function frame(now: number): void {
   const dt = Math.min(0.25, (now - last) / 1000);
   last = now;
@@ -187,10 +220,12 @@ function frame(now: number): void {
   for (const t of store.tracks.values()) {
     tmp.set(colorOf(t.bus.line));
     const chosen = t.bus.id === selected;
-    buses.add(t.x, 6, t.z, tmp, chosen ? BUS_SIZE * 1.8 : BUS_SIZE, t.alpha * (t.bus.live ? 1 : 0.5));
+    buses.add(t.x, 6 + (kart?.heightAt(t.x, t.z) ?? 0), t.z, tmp, chosen ? BUS_SIZE * 1.8 : BUS_SIZE, t.alpha * (t.bus.live ? 1 : 0.5));
   }
   buses.commit();
   controls.update();
+  kart?.update(camera, controls.target, now);
+  liftLines();
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
 }

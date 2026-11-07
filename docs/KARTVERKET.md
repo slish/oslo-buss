@@ -112,7 +112,11 @@ Tala er langt under Cloudflare-grensene for statiske filer: 219 filer (grense 20
 - **Terreng på sjø:** DTM gir 0 over sjø; heile Oslofjorden blir difor flat 0 m. Fjorddjupn er ikkje med.
 - **Klipping av areal:** Sutherland–Hodgman gir null-breidde brubitar langs flisgrensa for konkave flater. Dei blir ikkje synlege med even-odd-fylling, men trianguleringa i ein visar må tole degenererte kantar.
 - **Bærum og sonekanten:** NVDB kjem i UTM 33 og resten i UTM 32; alt går via lengd/breidd, så skjøtane skal vere reine, men eg har ikkje samanlikna nabofliser visuelt.
-- **Ikkje verifisert visuelt:** Eg har sjekka flisene med tal (storleik, høgdefordeling, terrengpunkt i Oslo sentrum ≈ 1,6 m), men ikkje sett dei teikna i nettlesar. Det er neste steg.
+- **Verifisert visuelt (dev-visar, sjå «Visaren»):** Oslo sentrum (Bjørvika, Grønland), Fornebu/Snarøya, Romsås og Grorud er sett teikna i flat og i terrengmodus. Ingen synlege sømmar mellom fliser i vegar, bygg og areal, og NVDB (UTM 33) passar med N50 (UTM 32): vegane ligg mellom bygga der dei skal. Terrenget (Ekebergåsen, Grefsen, Romsås) ser rett ut.
+- **Sømmar i terrenget:** Terrengflater har ein svak skuggeforskjell langs flisgrensa fordi skuggen reknast per flis (éi-sidig differanse i kanten). Arealfargen langs kanten måtte hentast ein hårsmonn innanfor flisa, elles vart ein tynn mørk stripe synleg.
+- **Uklassifisert land:** N50 har ikkje klasse for flyplass, bart fjell m.m. (t.d. Fornebu-området), så der blir det ein dempa grunnfarge i staden for fjord-, skog- eller byfarge. Dette kan utvidast ved å ta fleire N50-klassar med i `N50_AREAS`.
+- **Kommunekanten:** Utanfor Oslo/Bærum blir det mørke trekantar der sjø/areal manglar (sjå «Areal klipt til kommunegrensa»); synleg i oversiktsbildet.
+- **Bygningspunkt som 8×8 m-boksar** gir tette «byklossar» i villastrøk. Det ser rimeleg ut frå avstand, men storleiken er rein gjetting.
 - Bygningstype-koden frå N50 og frå registeret kan følgje ulike kodelister; `guessHeight` bruker NS 3457-tala først og fremst for registeret.
 - Alder på DTM/DOM og kva år områda er målte er ikkje undersøkt.
 
@@ -125,10 +129,27 @@ npx tsx scripts/kartverket/build-tiles.ts  # lagar data-cache/tiles/
 npm test
 ```
 
+## Visaren (`?kart=kartverket`)
+
+Valfri teikning av flisene i `src/web/kartverket.ts`. Standardutsjånaden og `public/data/map.json` er uendra.
+
+```bash
+npm run kartverket:tiles   # lagar data-cache/tiles/ (éin gong)
+npm run dev                # opne http://localhost:5173/?kart=kartverket   (legg til &terreng=1 for terrengmodus)
+```
+
+- Vite-mellomvaren `devTiles` i `vite.config.ts` serverer `data-cache/tiles/` som `/kartverket-tiles/` berre i dev (`apply: 'serve'`). Flisene er ikkje i git og ikkje i produksjonsbygget; utan flaggen blir ingenting henta.
+- Fliser blir henta og frigjevne etter kameraet: radius = 2,2 × avstanden til målpunktet (5–16 km), maks 90 fliser og 4 samtidige hentingar, nærmaste først. Éin flis blir bygd per bilete.
+- Detaljnivå: store vegar og areal for alle lasta fliser; bygg, bygningspunkt, vegar i bustadgater og stiar berre for fliser innanfor 6,5 km frå kameraet.
+- Areal blir trianguleres (`ShapeUtils`, med hol) som flate meshar utan djupnetest, i klasserekkjefølgje, over ein dempa grunnfarge. Vegar er `LineSegments` per klasse. Bygg er ekstrudert omriss med høgd (delt `extrudeBlocks` i `basemap.ts`); bygningspunkt er 8×8 m-boksar.
+- `&terreng=1`: terrenget er eit skugga mesh med arealfarge i vertekssfargane; vegar, bygg, bussar og linjene til bussane følgjer høgda (`heightAt`). Flat modus er standard.
+- Målt i Browser-ruta i Claude (maskin utan eigen GPU-måling): 60 fps både i oversynsbiletet (90 fliser) og i nærbilete i Oslo sentrum med terreng. Bygging per flis: terreng ≈ 30 ms, bygg ≈ 11 ms, areal ≈ 2 ms.
+
 ## Neste steg
 
-1. Tegn flisene i nettlesaren bak eit flagg (t.d. `?kart=kartverket`): last `index.json`, hent fliser rundt kameraet, dekod med `decodeTile`, bygg three.js-geometri (areal trianguleres, vegar som linjer, bygg som ekstrudert omriss, terreng som mesh).
-2. Avgjer om terrenget skal brukast til høgda på bussar/vegar (y-aksen er flat i dag).
-3. Avgjer storleik for bygningspunkt, og om OSM skal supplere der N50 manglar.
+1. Ta med fleire N50-areal (flyplass, bart fjell, steinbrot) så «uklassifisert land» forsvinn.
+2. Teikn terrenget mjukare (fleire sampel eller normalar) og vurder om terrengmodus skal bli standard etter at han er prøvd på mobil.
+3. Bygningspunkt: avgjer storleik, og om OSM skal supplere der N50 manglar.
 4. Pakk ut zip i `download.ts` så heile kjeda er eitt steg, og legg til tilhøyrande Action om fliser skal byggast automatisk.
-5. Søk Norge digitalt-avtale (eller vent på at Kartverket opnar FKB) om meir detaljerte bygg er ønskte.
+5. Dersom flisene skal publiserast: sjå tilrådinga om statiske filer ovanfor, og legg `?kart` bak ein ekte konfigurasjon, ikkje dev-mellomvaren.
+6. Søk Norge digitalt-avtale (eller vent på at Kartverket opnar FKB) om meir detaljerte bygg er ønskte.

@@ -27,8 +27,26 @@ function devRelay(): Plugin {
   };
 }
 
+/** In development the tiles from data-cache/tiles are served under /kartverket-tiles/. They are not in git or in the build. */
+function devTiles(): Plugin {
+  const dir = join(process.cwd(), 'data-cache/tiles');
+  return {
+    name: 'oslo-buss-dev-tiles',
+    apply: 'serve',
+    configureServer(server) {
+      server.middlewares.use('/kartverket-tiles', (req, res) => {
+        const name = decodeURIComponent((req.url ?? '/').split('?')[0].slice(1));
+        const file = join(dir, name);
+        if (!/^(index\.json|-?\d+_-?\d+\.bin)$/.test(name) || !existsSync(file)) { res.statusCode = 404; return void res.end('not found'); }
+        res.setHeader('content-type', name.endsWith('.json') ? 'application/json' : 'application/octet-stream');
+        res.end(readFileSync(file));
+      });
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [devRelay()],
+  plugins: [devRelay(), devTiles()],
   server: { port: 5173 },
   build: { target: 'es2022' },
 });
