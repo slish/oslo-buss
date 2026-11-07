@@ -13,6 +13,7 @@ import { SkyDome } from './sky';
 import { applyLight, applySnow, lightAt, snowCover } from './daylight';
 import { WeatherFeed } from './weather';
 import { Precip } from './precip';
+import { delayColor, delayLabel, summarize } from './delay';
 
 const BUS_SIZE = 420; // meters across on the ground
 const STOP_SIZE = 70;
@@ -108,8 +109,11 @@ function flag(button: string, pressed: boolean, change: (p: URLSearchParams) => 
   el.addEventListener('click', () => { const p = new URLSearchParams(location.search); change(p); location.search = p.toString(); });
 }
 flag('#opt-kart', useKart, (p) => { if (useKart) { p.delete('kart'); p.delete('terreng'); } else p.set('kart', 'kartverket'); });
+const delayMode = params.get('forseinking') === '1'; // ?forseinking=1: buses and roads are colored by how late they are
+flag('#opt-forseinking', delayMode, (p) => { if (delayMode) p.delete('forseinking'); else p.set('forseinking', '1'); });
 flag('#opt-terreng', useTerrain, (p) => { if (useTerrain) p.delete('terreng'); else { p.set('kart', 'kartverket'); p.set('terreng', '1'); } });
 document.querySelector<HTMLElement>('#credit-kartverket')!.hidden = !useKart;
+document.querySelector<HTMLElement>('#delay-key')!.hidden = !delayMode;
 let kart: KartverketMap | undefined;
 if (useKart) {
   void (async () => {
@@ -408,6 +412,10 @@ function showLineInfo(name: string): void {
   add(infoEl, 'row', 'Mot ' + info.headsigns.join(' og '));
   const running = [...store.tracks.values()].filter((t) => !t.leaving && t.bus.line === name).length;
   add(infoEl, 'row', running + ' bussar på vegen no');
+  if (delayMode) {
+    const s = summarize([...store.tracks.values()].filter((t) => !t.leaving && t.bus.line === name).map((t) => t.bus));
+    add(infoEl, 'row', s.mean === null ? 'Gjennomsnittleg forseinking: ingen sanntidsdata' : `Gjennomsnittleg forseinking: ${delayLabel(s.mean)} (${s.measured} av ${s.total} bussar målt)`);
+  }
   add(infoEl, 'row', info.trips ? 'I dag: ' + info.trips + ' turar, første ' + clock(info.first!) + ', siste framme ' + clock(info.last!) : 'Ingen turar i dag');
   add(infoEl, 'row', 'Neste time: ' + info.nextHour + ' avgangar');
 }
@@ -445,7 +453,23 @@ function showStatus(): void {
     ? `${live} bussar etter rutetabell, Entur svarar ikkje`
     : store.error ? `${live} bussar, mista kontakt med tenaren`
     : `${live} bussar på veg · sanntid ${time}`;
+  if (delayMode) showDelays();
   if (selected || pickedStop || pickedLine) showInfo();
+}
+/** Delay mode: the summary in the panel, and each road in the color of the mean delay of its buses (grey without measured data). */
+function showDelays(): void {
+  const active = [...store.tracks.values()].filter((t) => !t.leaving).map((t) => t.bus);
+  const s = summarize(active);
+  document.querySelector('#delay-summary')!.textContent = s.measured
+    ? `${s.late} av ${s.measured} bussar er over 3 min forseinka` + (s.measured < s.total ? ` (${s.total - s.measured} utan sanntid)` : '')
+    : 'Ingen bussar med sanntidsdata';
+  const perLine = new Map<string, { delay: number; live: boolean }[]>();
+  for (const b of active) perLine.set(b.line, [...(perLine.get(b.line) ?? []), b]);
+  for (const [name, materials] of lineMaterials) {
+    const mean = summarize(perLine.get(name) ?? []).mean;
+    const color = delayColor(mean ?? 0, mean !== null);
+    for (const material of materials) material.color.set(color);
+  }
 }
 store.onChange = showStatus;
 store.start();
@@ -474,7 +498,7 @@ function frame(now: number): void {
   for (const t of store.tracks.values()) {
     if (t.bus.id === riding) { ridden = t; continue; } // from the seat the bus itself is not drawn
     if (hiddenLines.has(t.bus.line)) continue;
-    tmp.set(colorOf(t.bus.line));
+    tmp.set(delayMode ? delayColor(t.bus.delay, t.bus.live) : colorOf(t.bus.line));
     const chosen = t.bus.id === selected;
     const ground = kart?.heightAt(t.x, t.z) ?? 0;
     // Close to the camera the light gives way to the model of the bus, smoothly; the chosen bus keeps a small halo.
