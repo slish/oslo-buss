@@ -1,5 +1,5 @@
 import { Color, GridHelper, Line, LineBasicMaterial, BufferGeometry, Float32BufferAttribute, PerspectiveCamera, Scene, Vector3, WebGLRenderer, AdditiveBlending } from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { MapCamera } from './mapcamera';
 import type { MapFile } from '../shared/map';
 import { buildBuildings, buildRoads } from './basemap';
 import { Glow } from './glow';
@@ -111,15 +111,11 @@ if (params.get('kart') === 'kartverket') {
 // ---- camera ----
 const center = new Vector3((minX + maxX) / 2, 0, (minZ + maxZ) / 2);
 const span = Math.max(maxX - minX, maxZ - minZ);
-camera.position.set(center.x, span * 0.95, center.z + span * 0.75);
-const controls = new OrbitControls(camera, canvas);
-controls.target.copy(center);
-controls.enableDamping = true;
-controls.maxPolarAngle = Math.PI * 0.495; // almost down to the horizon
-controls.minDistance = 20; // close to the ground, where the buses are models
-controls.zoomToCursor = true;
-controls.maxDistance = 120_000;
-controls.update();
+const controls = new MapCamera(camera, canvas, {
+  x: center.x, z: center.z, distance: Math.hypot(span * 0.95, span * 0.75), yaw: 0, elevation: Math.atan2(span * 0.95, span * 0.75),
+});
+controls.setGround((x, z) => kart?.heightAt(x, z) ?? 0);
+controls.update(1);
 // For looking at the scene from the console while developing: window.__oslo.camera, .controls, .toX, .toZ.
 if (import.meta.env.DEV) Object.assign(window, { __oslo: { camera, controls, toX, toZ, store } });
 
@@ -127,12 +123,7 @@ if (import.meta.env.DEV) Object.assign(window, { __oslo: { camera, controls, toX
 let nearNow = 0, farNow = 0;
 let stopShrink = 1; // the markers of the stops are 70 m discs: close up they shrink with the distance, so they do not cover the street
 function keepAbove(): void {
-  const ground = (x: number, z: number) => kart?.heightAt(x, z) ?? 0;
-  const lift = Math.max(0, ground(controls.target.x, controls.target.z) - controls.target.y);
-  if (lift > 0) { controls.target.y += lift; camera.position.y += lift; }
-  const low = ground(camera.position.x, camera.position.z) + 2.5 - camera.position.y;
-  if (low > 0) camera.position.y += low;
-  const dist = camera.position.distanceTo(controls.target);
+  const dist = controls.distance;
   const shrink = Math.min(1, Math.max(0.06, dist / 2500));
   if (Math.abs(shrink - stopShrink) > 0.01) { stopShrink = shrink; resize(); }
   const near = Math.min(100, Math.max(0.5, dist * 0.01)), far = Math.min(400_000, Math.max(20_000, dist * 8));
@@ -266,7 +257,7 @@ function frame(now: number): void {
   }
   busModels.commit();
   buses.commit();
-  controls.update();
+  controls.update(dt);
   kart?.update(camera, controls.target, now);
   liftLines();
   keepAbove();
