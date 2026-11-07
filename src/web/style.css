@@ -50,3 +50,10 @@ footer a { color: #9db4dd; pointer-events: auto; }
 #hour button { font: inherit; font-size: 11px; color: var(--dim); background: #0a0f1ccc; border: 1px solid #ffffff22; border-radius: 6px; padding: 2px 8px; cursor: pointer; }
 /* On a daytime sky the white text needs something dark behind it. */
 header { padding: 10px 12px; margin: -10px -12px; border-radius: 12px; background: linear-gradient(135deg, #05070dbb, #05070d66); backdrop-filter: blur(3px); }
+#delay-key { margin-top: 10px; max-width: 260px; font-size: 12px; color: var(--dim); }
+#delay-key[hidden] { display: none; }
+#delay-key p { margin: 0 0 4px; }
+#delay-summary { color: var(--ink); font-weight: 600; }
+#delay-key .bar { height: 8px; border-radius: 4px; background: linear-gradient(90deg, #4da3ff 0%, #3ddc84 16%, #3ddc84 30%, #ffd23f 55%, #ff9a2e 78%, #ff3b30 100%); }
+#delay-key .ticks { display: flex; justify-content: space-between; font-size: 10px; margin: 2px 0 6px; }
+#delay-key .swatch { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #6b7488; }
