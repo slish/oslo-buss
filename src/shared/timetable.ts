@@ -60,15 +60,34 @@ export function decodeShape(flat: number[]): Shape {
   return { lat, lon, dist };
 }
 
+/**
+ * The shapes of the file, decoded when first asked for: a cold start of the Durable Object only needs those of the buses on the
+ * road, and decoding all of them is the larger part of the time it takes to start. It reads like a Map.
+ */
+export class LazyShapes {
+  private readonly decoded = new Map<string, Shape>();
+  constructor(private readonly flat: Record<string, number[]>) {}
+  has(id: string): boolean { return Object.hasOwn(this.flat, id); }
+  get(id: string): Shape | undefined {
+    let shape = this.decoded.get(id);
+    if (!shape && this.has(id)) this.decoded.set(id, (shape = decodeShape(this.flat[id])));
+    return shape;
+  }
+  get size(): number { return Object.keys(this.flat).length; }
+  *entries(): IterableIterator<[string, Shape]> { for (const id of Object.keys(this.flat)) yield [id, this.get(id)!]; }
+  *values(): IterableIterator<Shape> { for (const [, shape] of this.entries()) yield shape; }
+  [Symbol.iterator](): IterableIterator<[string, Shape]> { return this.entries(); }
+}
+
 export class Timetable {
-  readonly shapes = new Map<string, Shape>();
+  readonly shapes: LazyShapes;
   readonly trips: Trip[];
   readonly byId = new Map<string, Trip>();
   private readonly serviceSets: Set<string>[];
   private readonly dayCache = new Map<string, Trip[]>();
 
   constructor(readonly file: TimetableFile) {
-    for (const [id, flat] of Object.entries(file.shapes)) this.shapes.set(id, decodeShape(flat));
+    this.shapes = new LazyShapes(file.shapes);
     this.serviceSets = file.services.map((d) => new Set(d));
     this.trips = file.trips.map(([id, pattern, start, service]) => ({ id: TRIP_PREFIX + id, pattern: file.patterns[pattern], start, service }));
     for (const t of this.trips) this.byId.set(t.id, t);
