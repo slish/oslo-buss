@@ -20,7 +20,14 @@
       <p id="hour"><label for="tid">Klokka</label> <input id="tid" type="range" min="0" max="1439" step="5" value="720" /> <span id="tid-text"></span> <button id="tid-now" type="button" hidden>No</button></p>
       <div id="options" role="group" aria-label="Val for kartet">
         <button id="opt-kart" type="button" aria-pressed="false">Kartverket-kart</button>
+        <button id="opt-forseinking" type="button" aria-pressed="false">Forseinking</button>
         <button id="opt-terreng" type="button" aria-pressed="false">Terreng</button>
+      </div>
+      <div id="delay-key" hidden>
+        <p id="delay-summary"></p>
+        <div class="bar" aria-hidden="true"></div>
+        <div class="ticks"><span>tidleg</span><span>i rute</span><span>3 min</span><span>5 min</span><span>10+ min</span></div>
+        <p class="note"><span class="swatch"></span> grå: ingen sanntidsdata</p>
       </div>
     </header>
     <aside id="info" hidden></aside>
