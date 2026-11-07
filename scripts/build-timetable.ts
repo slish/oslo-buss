@@ -16,12 +16,17 @@ import { parseGtfsTime } from '../src/shared/time';
 import { TRIP_PREFIX, type TimetableFile } from '../src/shared/timetable';
 
 export const GTFS_URL = 'https://storage.googleapis.com/marduk-production/outbound/gtfs/rb_rut-aggregated-gtfs.zip';
-// Spread over Oslo and Bærum: 20 centre/west, 31 Fornebu-Grorud, 63 Romsås; 24 Fornebu-Brynseng, 46 north-west, 54 north,
-// 58 north-east, 70 south-east, 71 far south, 130 Sandvika-Skøyen.
+/** Every bus line of Ruter in Oslo and Bærum that runs today (97), sorted as in the feed: the nightly build keeps all of them. Pass line numbers to build fewer. */
 export const DEFAULT_LINES = [
-  '20', '24', '31', '46', '54', '58', '63', '70', '71', '130',
-  // The next twenty by number of trips: more of the inner city, the east, the south-east and Bærum.
-  '21', '23', '25', '30', '34', '37', '41', '42', '65', '69', '72', '73', '74', '76', '79', '81', '110', '140', '150', '160',
+  '100', '110', '120', '130', '140', '145', '150', '160', '20', '31E', '46X', '56B',
+  '75B', '77B', '78B', '21', '160E', '23', '24', '25', '26', '28', '140E', '150E',
+  '30', '2B', '3B', '13B', '75C', '77X', '31', '110E', '115E', '125E', '130N', '140N',
+  '34', '37', '1N', '2N', '3N', '4N', '5N', '11N', '12N', '19N', '63N', '70E',
+  '70N', '81N', '83N', '40', '13E', '25B', '31B', '67B', '71B', '72B', '73X', '74B',
+  '41', '42', '45', '46', '48', '51', '54', '56', '58', '60', '62', '63',
+  '64', '65', '66', '67', '68', '69', '70', '71', '72', '73', '74', '75A',
+  '76', '77', '78A', '79', '80E', '81', '83', '84E', '85', '87', '74X', '42N',
+  '31X',
 ];
 const CACHE = 'data-cache/rut.zip';
 const OUT = 'public/data/timetable.json';

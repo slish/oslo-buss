@@ -6,15 +6,22 @@ Oslo-buss køyrer som ein Cloudflare Worker utan tenar å vedlikehalde.
 |---|---|---|
 | Sida (`dist/`) og kartfila `data/map.json` | Worker static assets | Gratis og ubegrensa, køyrer ingen kode |
 | `/feeds/buses` og `/data/timetable.json` | Worker → ein Durable Object (`Feeds`) | Sjå under |
+| `/feeds/weather` | Worker, mellomlagra i 30 min (Cache API) | Ubetydeleg: ein førespurnad til MET kvar halvtime |
 | Dagleg tidstabell | GitHub Action → grenen `data` i dette repoet | Gratis |
 
 ## Korleis det heng saman
 
-- **Éin Durable Object for alle.** Alle førespurnader til `/feeds/*` går til same objekt (`idFromName('main')`). Det er det som
-  gjer at Entur ser éin førespurnad kvart 15. sekund uansett kor mange som ser på, og berre medan nokon spør.
-- **Tidstabellen** hentar objektet frå `TIMETABLE_URL` (`wrangler.jsonc`, grenen `data`), les han på nytt kvar sjette time, og
-  held siste gode kopi om GitHub ikkje svarar. Nettlesaren får han frå `/data/timetable.json`, slik at han alltid er den same
-  som relayen bruker.
+- **Éin Durable Object for alle.** Alle førespurnader til `/feeds/buses` og `/data/timetable.json` går til same objekt
+  (`idFromName('main')`). Det er det som gjer at Entur ser éin førespurnad kvart 15. sekund uansett kor mange som ser på, og
+  berre medan nokon spør.
+- **Tidstabellen** hentar objektet frå `TIMETABLE_URL` (`wrangler.jsonc`, grenen `data`). Han blir lagra gzippa i objektet sitt
+  eige lager (`src/worker/pack.ts`), så ein kaldstart etter utkasting ikkje må laste han ned igjen. Kvar halvtime blir GitHub
+  spurt med `If-None-Match` (ETag): eit tomt 304-svar om ingenting er nytt, elles blir kopien bytt ut. Objektet held siste gode
+  kopi om GitHub ikkje svarar. Nettlesaren får tidstabellen frå `/data/timetable.json`, slik at han alltid er den same som
+  relayen bruker.
+- **Vêret** (`/feeds/weather`, `src/worker/weather.ts`) går ikkje via objektet. Workeren hentar frå MET Norway sitt
+  locationforecast-API med `User-Agent: slish-oslo-buss github.com/slish/oslo-buss` (MET krev namn på appen og kontaktinfo),
+  reduserer svaret til nokre tal og mellomlagrar det i 30 minutt med Cache API. Vilkåra krev kreditering, som står i botnen av sida.
 - **Kartfila** (`public/data/map.json`) er sjekka inn og følgjer med bygget som ei vanleg fil. `public/.assetsignore` held
   ein lokal `timetable.json` ute av opplastinga: Worker-en svarar på den stien.
 
@@ -81,5 +88,13 @@ Cache API verkar ikkje på `workers.dev`, men Workeren treng det ikkje.
 
 ## Endre kva linjer som er med
 
-Linjene står i `DEFAULT_LINES` i `scripts/build-timetable.ts`. Endra du dei, køyr `npm run timetable` og `npm run map`, sjekk
-inn `map.json`, og køyr tidstabell-flyten på GitHub (Actions → Tidstabell → Run workflow) så `data`-grenen blir oppdatert.
+Standardlista er alle 97 linjene i `DEFAULT_LINES` i `scripts/build-timetable.ts`, og det er ho den nattlege jobben bygger. Endra
+du lista, køyr `npm run timetable` og `npm run map`, sjekk inn `map.json`, og køyr tidstabell-flyten på GitHub
+(Actions → Tidstabell → Run workflow) så `data`-grenen blir oppdatert.
+
+For å prøve færre linjer utan å endre koden, fyll ut feltet **lines** når du køyrer Tidstabell for hand (til dømes `20 31 63`).
+Då gjeld det berre til neste nattlege køyring. Det er òg måten å skalere tilbake på om CPU-grensa blir overskriden: køyr
+Tidstabell med færre linjer og så Publiser.
+
+Fleire linjer gir ei større tidstabell (ca. 2,8 MB med alle 97, ca. 1 MB gzippa) og meir CPU ved kvar henting. Mål sjølv med
+`npx tsx scripts/measure-lines.ts`.
