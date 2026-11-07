@@ -365,7 +365,7 @@ function frame(now: number): void {
     const m = modelness(Math.hypot(camera.position.x - t.x, camera.position.y - ground, camera.position.z - t.z));
     const alpha = t.alpha * (t.bus.live ? 1 : 0.5);
     const size = (chosen ? BUS_SIZE * 1.8 : BUS_SIZE) * (1 - 0.92 * m);
-    buses.add(t.x, 6 + ground, t.z, tmp, chosen ? Math.max(size, 30) : size, alpha * (1 - (chosen ? 0.7 : 0.85) * m));
+    if (!riding) buses.add(t.x, 6 + ground, t.z, tmp, chosen ? Math.max(size, 30) : size, alpha * (1 - (chosen ? 0.7 : 0.85) * m)); // from the seat the other buses do not glow, only the models close by show
     if (m > 0) {
       let pitch = 0;
       if (kart?.options.terrain) {
