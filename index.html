@@ -12,8 +12,11 @@
     <header>
       <h1>Oslo-buss</h1>
       <p id="status">Hentar bussar…</p>
-      <ul id="legend"></ul>
-      <p id="lines-toggle"><button id="lines-all" type="button">Vis alle</button> <button id="lines-none" type="button">Skjul alle</button></p>
+      <button id="legend-toggle" type="button" aria-expanded="true" aria-controls="legend-body"><span class="arrow">▾</span> Linjer <span id="legend-count"></span></button>
+      <div id="legend-body">
+        <ul id="legend"></ul>
+        <p id="lines-toggle"><button id="lines-all" type="button">Vis alle</button> <button id="lines-none" type="button">Skjul alle</button></p>
+      </div>
       <div id="options" role="group" aria-label="Val for kartet">
         <button id="opt-kart" type="button" aria-pressed="false">Kartverket-kart</button>
         <button id="opt-terreng" type="button" aria-pressed="false">Terreng</button>

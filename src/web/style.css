@@ -39,3 +39,8 @@ footer a { color: #9db4dd; pointer-events: auto; }
 #lines-toggle { margin: 6px 0 0; pointer-events: auto; font-size: 11px; }
 #lines-toggle button { font: inherit; color: var(--dim); background: none; border: 0; padding: 0 6px 0 0; cursor: pointer; text-decoration: underline; }
 #lines-toggle button:hover { color: var(--ink); }
+#legend-toggle { pointer-events: auto; font: inherit; font-size: 12px; font-weight: 600; color: var(--ink); background: #0a0f1ccc; border: 1px solid #ffffff22; border-radius: 6px; padding: 4px 10px; margin-bottom: 6px; cursor: pointer; }
+#legend-toggle .arrow { display: inline-block; width: 1em; color: var(--dim); }
+#legend-toggle #legend-count { color: var(--dim); font-weight: 400; }
+#legend-body[hidden] { display: none; }
+@media (max-width: 560px) { #legend { max-height: 30vh; } #legend .long { display: none; } }
