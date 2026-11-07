@@ -27,20 +27,26 @@ function devRelay(): Plugin {
   };
 }
 
-/** In development the tiles from data-cache/tiles are served under /kartverket-tiles/. They are not in git or in the build. */
+/** In development the tiles from data-cache/tiles (and tiles-fine) are served under /kartverket-tiles/ (-fine/). They are not in git or in the build. */
 function devTiles(): Plugin {
-  const dir = join(process.cwd(), 'data-cache/tiles');
+  const serve = (url: string, folder: string) => ({
+    url,
+    dir: join(process.cwd(), 'data-cache', folder),
+  });
+  const mounts = [serve('/kartverket-tiles-fine', 'tiles-fine'), serve('/kartverket-tiles', 'tiles')];
   return {
     name: 'oslo-buss-dev-tiles',
     apply: 'serve',
     configureServer(server) {
-      server.middlewares.use('/kartverket-tiles', (req, res) => {
-        const name = decodeURIComponent((req.url ?? '/').split('?')[0].slice(1));
-        const file = join(dir, name);
-        if (!/^(index\.json|-?\d+_-?\d+\.bin)$/.test(name) || !existsSync(file)) { res.statusCode = 404; return void res.end('not found'); }
-        res.setHeader('content-type', name.endsWith('.json') ? 'application/json' : 'application/octet-stream');
-        res.end(readFileSync(file));
-      });
+      for (const { url, dir } of mounts) {
+        server.middlewares.use(url, (req, res) => {
+          const name = decodeURIComponent((req.url ?? '/').split('?')[0].slice(1));
+          const file = join(dir, name);
+          if (!/^(index\.json|-?\d+_-?\d+\.bin)$/.test(name) || !existsSync(file)) { res.statusCode = 404; return void res.end('not found'); }
+          res.setHeader('content-type', name.endsWith('.json') ? 'application/json' : 'application/octet-stream');
+          res.end(readFileSync(file));
+        });
+      }
     },
   };
 }
