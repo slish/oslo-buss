@@ -99,7 +99,7 @@ export function extrudeBlocks(blocks: Block[]): Mesh {
   geometry.setAttribute('color', new BufferAttribute(new Float32Array(colors), 3));
   geometry.setAttribute('wall', new BufferAttribute(new Float32Array(wall), 3));
   geometry.setIndex(new BufferAttribute(positions.length / 3 > 65535 ? new Uint32Array(indices) : new Uint16Array(indices), 1));
-  const mesh = new Mesh(geometry, daylit(new MeshBasicMaterial({ vertexColors: true, side: 2 /* DoubleSide */ }), true));
+  const mesh = new Mesh(geometry, daylit(new MeshBasicMaterial({ vertexColors: true, side: 2 /* DoubleSide */ }), 'walls'));
   mesh.frustumCulled = false;
   return mesh;
 }
