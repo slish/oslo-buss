@@ -7,6 +7,11 @@ on:
   schedule:
     - cron: '30 3 * * *'
   workflow_dispatch:
+    inputs:
+      lines:
+        description: 'Linjer (skilde med mellomrom), til dømes "20 31 63". Tomt gir standardlista i scripts/build-timetable.ts.'
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -26,7 +31,9 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Bygg tidstabellen
-        run: npm run timetable -- --fresh
+        run: npm run timetable -- --fresh $LINES
+        env:
+          LINES: ${{ inputs.lines }}
       - name: Sjekk at han er fornuftig
         run: npm run check-timetable
       - uses: actions/upload-artifact@v7

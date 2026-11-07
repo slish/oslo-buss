@@ -35,6 +35,7 @@ try {
 const file = store.timetable.file;
 
 // ---- the roads of the lines and their stops ----
+const LINE_OPACITY = file.lines.length > 15 ? 0.3 : 0.5; // many roads add up to white
 const shapeLines: { position: Float32BufferAttribute }[] = [];
 const lineMaterials = new Map<string, LineBasicMaterial[]>();
 const shapeIds: string[] = [];
@@ -55,7 +56,7 @@ for (const [id, shape] of store.timetable.shapes) {
   geometry.setAttribute('position', position);
   shapeLines.push({ position });
   shapeIds.push(id);
-  const material = new LineBasicMaterial({ color: colorOf(lineOfShape.get(id) ?? ''), transparent: true, opacity: 0.5, blending: AdditiveBlending, depthWrite: false, depthTest: false });
+  const material = new LineBasicMaterial({ color: colorOf(lineOfShape.get(id) ?? ''), transparent: true, opacity: LINE_OPACITY, blending: AdditiveBlending, depthWrite: false, depthTest: false });
   const lineName = lineOfShape.get(id) ?? '';
   lineMaterials.set(lineName, [...(lineMaterials.get(lineName) ?? []), material]);
   const road = new Line(geometry, material);
@@ -180,8 +181,20 @@ window.addEventListener('resize', resize);
 resize();
 
 // ---- legend ----
-for (const line of file.lines) {
+const hiddenLines = new Set<string>();
+const legendItems = new Map<string, HTMLLIElement>();
+function applyLineVisibility(): void {
+  for (const [name, li] of legendItems) li.classList.toggle('off', hiddenLines.has(name));
+  for (const [name, materials] of lineMaterials) for (const material of materials) material.visible = !hiddenLines.has(name);
+  if (selected && hiddenLines.has(store.tracks.get(selected)?.bus.line ?? '')) choose({});
+}
+document.querySelector('#lines-all')!.addEventListener('click', () => { hiddenLines.clear(); applyLineVisibility(); });
+document.querySelector('#lines-none')!.addEventListener('click', () => { for (const l of file.lines) hiddenLines.add(l.name); applyLineVisibility(); });
+for (const line of [...file.lines].sort((a, b) => parseInt(a.name) - parseInt(b.name) || a.name.localeCompare(b.name))) {
   const li = document.createElement('li');
+  li.title = 'Klikk for å skjule eller vise linja';
+  li.addEventListener('click', () => { if (hiddenLines.has(line.name)) hiddenLines.delete(line.name); else hiddenLines.add(line.name); applyLineVisibility(); });
+  legendItems.set(line.name, li);
   li.style.color = colorOf(line.name);
   li.innerHTML = `<span class="dot"></span><span class="name"></span><span class="long"></span>`;
   li.querySelector('.name')!.textContent = line.name;
@@ -194,7 +207,7 @@ let selected: string | null = null; // a bus
 let pickedStop: string | null = null;
 let pickedLine: string | null = null;
 function highlightLine(): void {
-  for (const [name, materials] of lineMaterials) for (const material of materials) material.opacity = pickedLine === null ? 0.5 : name === pickedLine ? 1 : 0.18;
+  for (const [name, materials] of lineMaterials) for (const material of materials) material.opacity = pickedLine === null ? LINE_OPACITY : name === pickedLine ? 1 : 0.18;
 }
 function choose(what: { bus?: string; stop?: string; line?: string }): void {
   selected = what.bus ?? null; pickedStop = what.stop ?? null; pickedLine = what.line ?? null;
@@ -215,7 +228,7 @@ const screen = new Vector3();
 function busAt(clientX: number, clientY: number): Track | null {
   let best: Track | null = null, bestD = 18; // pixels
   for (const t of store.tracks.values()) {
-    if (t.leaving) continue;
+    if (t.leaving || hiddenLines.has(t.bus.line)) continue;
     screen.set(t.x, (kart?.heightAt(t.x, t.z) ?? 0) + 3, t.z).project(camera);
     if (screen.z > 1) continue;
     const d = Math.hypot((screen.x * 0.5 + 0.5) * window.innerWidth - clientX, (-screen.y * 0.5 + 0.5) * window.innerHeight - clientY);
@@ -374,6 +387,7 @@ function frame(now: number): void {
   let ridden: Track | undefined;
   for (const t of store.tracks.values()) {
     if (t.bus.id === riding) { ridden = t; continue; } // from the seat the bus itself is not drawn
+    if (hiddenLines.has(t.bus.line)) continue;
     tmp.set(colorOf(t.bus.line));
     const chosen = t.bus.id === selected;
     const ground = kart?.heightAt(t.x, t.z) ?? 0;
