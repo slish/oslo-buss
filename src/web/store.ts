@@ -90,7 +90,12 @@ export class BusStore {
       const place = placeOnShape(t.shape, t.shown);
       t.x = toX(place.lon);
       t.z = toZ(place.lat);
-      t.bearing = place.bearing;
+      // Heading from the road 10 m behind to 10 m ahead, so a corner is turned over some 20 m of road, not in one frame; then eased a little in time.
+      const back = placeOnShape(t.shape, t.shown - 10), ahead = placeOnShape(t.shape, t.shown + 10);
+      const dx = toX(ahead.lon) - toX(back.lon), dz = toZ(ahead.lat) - toZ(back.lat);
+      const target = Math.hypot(dx, dz) > 1 ? (Math.atan2(dx, -dz) * 180) / Math.PI : place.bearing;
+      const turn = ((target - t.bearing + 540) % 360) - 180; // the short way round
+      t.bearing = (t.bearing + turn * (1 - Math.exp(-dt * 6)) + 360) % 360;
       t.alpha = t.leaving ? t.alpha - fade : Math.min(1, t.alpha + fade);
       if (t.leaving && t.alpha <= 0) this.tracks.delete(id);
     }
