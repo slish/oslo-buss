@@ -17,6 +17,13 @@ h1 { margin: 0; font-size: 20px; font-weight: 650; letter-spacing: 0.02em; }
 #options button[aria-pressed="true"] { color: var(--ink); border-color: #9db4dd; background: #1a2740cc; }
 #info { position: fixed; left: 16px; bottom: 70px; min-width: 240px; max-width: 320px; padding: 12px 14px; border: 1px solid #ffffff22; border-radius: 10px; background: #0a0f1ccc; backdrop-filter: blur(6px); }
 #info[hidden] { display: none; }
+#walk-hint { position: fixed; left: 50%; bottom: 78px; transform: translateX(-50%); margin: 0; padding: 6px 12px; max-width: calc(100vw - 32px); box-sizing: border-box; border-radius: 8px; background: #0a0f1c99; color: var(--ink); font-size: 12px; text-align: center; pointer-events: none; text-shadow: 0 1px 4px #000; }
+#walk-hint[hidden] { display: none; }
+#walk-hint .walls::before { content: "(på)"; }
+#walk-hint[data-walls="false"] .walls::before { content: "(av)"; }
+#walk-stick { position: fixed; width: 100px; height: 100px; margin: -50px 0 0 -50px; border-radius: 50%; border: 2px solid #ffffff44; background: #ffffff10; pointer-events: none; z-index: 5; }
+#walk-stick[hidden] { display: none; }
+#walk-stick .knob { position: absolute; left: 50%; top: 50%; width: 40px; height: 40px; margin: -20px 0 0 -20px; border-radius: 50%; background: #ffffff66; }
 #info .head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; }
 #info .badge { font-size: 18px; font-weight: 700; }
 #info .to { font-weight: 600; }
