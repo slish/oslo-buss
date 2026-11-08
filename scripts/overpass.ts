@@ -1,5 +1,4 @@
-// A polite client for the public Overpass servers (OpenStreetMap data, ODbL), shared by scripts/build-map.ts and
-// scripts/kartverket/osm.ts: three mirrors in turn, retries with growing waits, and a pause between requests for the caller to use.
+// A polite client for the public Overpass servers (OpenStreetMap data, ODbL), used by scripts/kartverket/osm.ts: three mirrors in turn, retries with growing waits, and a pause between requests for the caller to use.
 
 import { CLIENT_NAME } from '../src/shared/client';
 

@@ -1,6 +1,6 @@
 // The map from Kartverket's open data (docs/KARTVERKET.md), drawn from the tiles in src/shared/tiles.ts.
 // Behind ?kart=kartverket. Tiles are fetched and released around the camera; each tile becomes a few meshes.
-// ?terreng=1 lifts roads and buildings onto the terrain model instead of drawing everything flat.
+// The options (KartOptions) say what is drawn: the colours of the ground, the terrain model, the buildings. Roads are always there.
 // Map data © Kartverket, CC BY 4.0.
 
 import {
@@ -8,7 +8,7 @@ import {
   type Camera, type Material, type Object3D,
 } from 'three';
 import { decodeTile, TILE_SIZE, tileName, type Tile, type XY } from '../shared/tiles';
-import { extrudeBlocks, type Block } from './basemap';
+import { extrudeBlocks, type Block } from './buildings';
 import { daylit, daylitLine, SNOW_BY_CLASS } from './mapshader';
 import { upsample2 } from '../shared/terrain';
 import { footprintOf, insideAny, pointInRing, type Footprint } from '../shared/geom';
@@ -27,6 +27,7 @@ const ROAD_STYLE = [
   { color: '#5b78c0', opacity: 0.95 }, { color: '#4a64a0', opacity: 0.9 }, { color: '#3f568c', opacity: 0.8 },
   { color: '#344a78', opacity: 0.7 }, { color: '#2b3d64', opacity: 0.55 }, { color: '#1c2a40', opacity: 0.4 }, { color: '#6a5a8c', opacity: 0.7 },
 ];
+const DARK_GROUND = '#0c1220'; // the ground without colours, and where no land cover is known
 const POINT_SIZE = 8; // meters across: the register only has a point for most buildings
 const FOUNDATION = 1.5; // meters the walls reach below the lowest ground (with ?terreng=1)
 const NEAR = 6500; // from the camera, meters: buildings and small roads are drawn within this
@@ -50,7 +51,14 @@ interface Loaded {
   footprints?: Footprint[];
 }
 
-export interface KartOptions { terrain: boolean }
+export interface KartOptions {
+  /** The ground follows the height model (else it is flat). */
+  terrain: boolean;
+  /** The ground has the colours of the land cover (forest, water, town); else it is one dark colour. */
+  ground: boolean;
+  /** Buildings are drawn (and stop a walker). */
+  buildings: boolean;
+}
 
 export class KartverketMap {
   readonly group = new Group();
@@ -96,6 +104,7 @@ export class KartverketMap {
 
   /** True if the scene point is inside the outline of a building (or the square of one known only as a point). Used to keep walkers out. */
   insideBuilding(x: number, z: number): boolean {
+    if (!this.options.buildings) return false;
     const l = this.tiles.get(tileName(Math.floor(x / TILE_SIZE), Math.floor(z / TILE_SIZE)));
     if (!l) return false;
     l.footprints ??= [
@@ -283,7 +292,7 @@ export class KartverketMap {
     l.detail = undefined;
     if (!near) return;
     const detail: Object3D[] = [...this.roadMeshes(l.tile, true)];
-    const b = this.buildingMesh(l.tile);
+    const b = this.options.buildings ? this.buildingMesh(l.tile) : undefined;
     if (b) detail.push(b);
     for (const o of detail) { l.group.add(o); l.meshes.push(o); }
     l.detail = detail;
@@ -301,6 +310,7 @@ export class KartverketMap {
     const base = new Mesh(ground, this.groundMaterial);
     base.renderOrder = -20;
     out.push(base);
+    if (!this.options.ground) return out;
     const per: { pos: number[]; idx: number[] }[] = AREA_COLORS.map(() => ({ pos: [], idx: [] }));
     for (const a of tile.areas) {
       const g = per[a.cls];
@@ -465,9 +475,10 @@ export class KartverketMap {
       const dz = (heights[j1 * n + i] - heights[j0 * n + i]) / 10 / ((j1 - j0) * step);
       // Light from the south-west: the same side as the walls.
       const shade = Math.min(1.6, Math.max(0.4, 1 + (dx * 0.55 - dz * 0.83) * 2.2));
-      const cls = clsAt(i, j);
-      if (this.ride) rideColor(color, cls, Math.hypot(dx, dz), x, z);
-      else color.set(cls < 0 ? '#0c1220' : AREA_COLORS[cls]);
+      const cls = this.options.ground ? clsAt(i, j) : -1;
+      if (!this.options.ground) color.set(DARK_GROUND);
+      else if (this.ride) rideColor(color, cls, Math.hypot(dx, dz), x, z);
+      else color.set(cls < 0 ? DARK_GROUND : AREA_COLORS[cls]);
       color.multiplyScalar(shade);
       col.set([color.r, color.g, color.b], k * 3);
       // How much snow it takes: none on water, less in forest and on steep ground, where the rock shows.

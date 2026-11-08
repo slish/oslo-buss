@@ -1,7 +1,5 @@
 import { Color, FogExp2, GridHelper, Line, LineBasicMaterial, BufferGeometry, Float32BufferAttribute, PerspectiveCamera, Scene, Vector3, WebGLRenderer, AdditiveBlending } from 'three';
 import { MapCamera } from './mapcamera';
-import type { MapFile } from '../shared/map';
-import { buildBuildings, buildRoads } from './basemap';
 import { Glow } from './glow';
 import { BusModels, BUS_LENGTH, MAX_BUSES, modelness } from './busmodel';
 import { BusStore, type Track } from './store';
@@ -15,6 +13,7 @@ import { Precip } from './precip';
 import { delayColor, summarize } from './delay';
 import { HourControl } from './hour';
 import { Legend } from './legend';
+import { setupMenu } from './menu';
 import { InfoPanel } from './infopanel';
 import { Picker } from './picking';
 
@@ -97,48 +96,38 @@ buses.points.renderOrder = 3;
 scene.add(buses.points);
 const busModels = new BusModels(scene);
 
-// ---- the map under it all: roads and buildings from OpenStreetMap, loaded once the lights are on ----
-// ?kart=kartverket draws Kartverket's tiles instead (see docs/KARTVERKET.md); &terreng=1 follows the terrain. The buttons set the flags.
+// ---- the map under it all: Kartverket's tiles (see docs/KARTVERKET.md), loaded once the lights are on ----
+// Three things can be turned on or off, by the buttons or the address: ?kart=kartverket the colours of the ground (else it is dark),
+// ?terreng=1 the terrain model, ?bygg=0 no buildings. The roads are always there.
 const params = new URLSearchParams(location.search);
-const useKart = params.get('kart') === 'kartverket';
-const useTerrain = useKart && params.get('terreng') === '1';
+const useGround = params.get('kart') === 'kartverket';
+const useTerrain = params.get('terreng') === '1';
+const useBuildings = params.get('bygg') !== '0';
 function flag(button: string, pressed: boolean, change: (p: URLSearchParams) => void): void {
   const el = document.querySelector<HTMLButtonElement>(button)!;
   el.setAttribute('aria-pressed', String(pressed));
   el.addEventListener('click', () => { const p = new URLSearchParams(location.search); change(p); location.search = p.toString(); });
 }
-flag('#opt-kart', useKart, (p) => { if (useKart) { p.delete('kart'); p.delete('terreng'); } else p.set('kart', 'kartverket'); });
+flag('#opt-kart', useGround, (p) => { if (useGround) p.delete('kart'); else p.set('kart', 'kartverket'); });
 const delayMode = params.get('forseinking') === '1'; // ?forseinking=1: buses and roads are colored by how late they are
 flag('#opt-forseinking', delayMode, (p) => { if (delayMode) p.delete('forseinking'); else p.set('forseinking', '1'); });
-flag('#opt-terreng', useTerrain, (p) => { if (useTerrain) p.delete('terreng'); else { p.set('kart', 'kartverket'); p.set('terreng', '1'); } });
-document.querySelector<HTMLElement>('#credit-kartverket')!.hidden = !useKart;
+flag('#opt-terreng', useTerrain, (p) => { if (useTerrain) p.delete('terreng'); else p.set('terreng', '1'); });
+flag('#opt-bygg', useBuildings, (p) => { if (useBuildings) p.set('bygg', '0'); else p.delete('bygg'); });
 document.querySelector<HTMLElement>('#delay-key')!.hidden = !delayMode;
 let kart: KartverketMap | undefined;
-if (useKart) {
-  void (async () => {
-    try {
-      const { KartverketMap } = await import('./kartverket');
-      const k = new KartverketMap({ terrain: useTerrain });
-      await k.start();
-      scene.add(k.group);
-      scene.remove(grid);
-      kart = k;
-      if (import.meta.env.DEV) Object.assign((window as unknown as { __oslo: object }).__oslo, { kart: k });
-    } catch (e) {
-      console.warn('Kunne ikkje laste Kartverket-fliser', e);
-      statusEl.textContent = e instanceof Error ? e.message : String(e);
-      statusEl.classList.add('warn');
-    }
-  })();
-} else void (async () => {
+void (async () => {
   try {
-    const response = await fetch('/data/map.json');
-    if (!response.ok) return; // the map is optional: without it the lines and buses still show
-    const map = (await response.json()) as MapFile;
-    scene.add(buildRoads(map), buildBuildings(map));
+    const { KartverketMap } = await import('./kartverket');
+    const k = new KartverketMap({ terrain: useTerrain, ground: useGround, buildings: useBuildings });
+    await k.start();
+    scene.add(k.group);
     scene.remove(grid);
+    kart = k;
+    if (import.meta.env.DEV) Object.assign((window as unknown as { __oslo: object }).__oslo, { kart: k });
   } catch (e) {
-    console.warn('Kunne ikkje laste kartet', e);
+    console.warn('Kunne ikkje laste Kartverket-fliser', e);
+    statusEl.textContent = e instanceof Error ? e.message : String(e);
+    statusEl.classList.add('warn');
   }
 })();
 
@@ -206,6 +195,7 @@ function applyLineVisibility(): void {
   if (selected && legend.isHidden(store.tracks.get(selected)?.bus.line ?? '')) choose({});
 }
 const legend = new Legend(file.lines, applyLineVisibility);
+setupMenu();
 
 // ---- picking: the bus nearest the pointer on the screen ----
 let selected: string | null = null; // a bus

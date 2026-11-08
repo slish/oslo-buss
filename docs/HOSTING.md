@@ -4,7 +4,7 @@ Oslo-buss køyrer som ein Cloudflare Worker utan tenar å vedlikehalde.
 
 | Del | Kor | Kostnad |
 |---|---|---|
-| Sida (`dist/`) og kartfila `data/map.json` | Worker static assets | Gratis og ubegrensa, køyrer ingen kode |
+| Sida (`dist/`) og kartflisene | Worker static assets | Gratis og ubegrensa, køyrer ingen kode |
 | `/feeds/buses` og `/data/timetable.json` | Worker → ein Durable Object (`Feeds`) | Sjå under |
 | `/feeds/weather` | Worker, mellomlagra i 30 min (Cache API) | Ubetydeleg: ein førespurnad til MET kvar halvtime |
 | Dagleg tidstabell | GitHub Action → grenen `data` i dette repoet | Gratis |
@@ -22,7 +22,7 @@ Oslo-buss køyrer som ein Cloudflare Worker utan tenar å vedlikehalde.
 - **Vêret** (`/feeds/weather`, `src/worker/weather.ts`) går ikkje via objektet. Workeren hentar frå MET Norway sitt
   locationforecast-API med `User-Agent: slish-oslo-buss github.com/slish/oslo-buss` (MET krev namn på appen og kontaktinfo),
   reduserer svaret til nokre tal og mellomlagrar det i 30 minutt med Cache API. Vilkåra krev kreditering, som står i botnen av sida.
-- **Kartfila** (`public/data/map.json`) er sjekka inn og følgjer med bygget som ei vanleg fil. `public/.assetsignore` held
+- **Kartflisene** blir henta frå grenen `tiles` av deploy-flyten og følgjer med bygget som vanlege filer. `public/.assetsignore` held
   ein lokal `timetable.json` ute av opplastinga: Worker-en svarar på den stien.
 
 ## Første gong
@@ -89,7 +89,7 @@ Cache API verkar ikkje på `workers.dev`, men Workeren treng det ikkje.
 ## Endre kva linjer som er med
 
 Standardlista er alle 97 linjene i `DEFAULT_LINES` i `scripts/build-timetable.ts`, og det er ho den nattlege jobben bygger. Endra
-du lista, køyr `npm run timetable` og `npm run map`, sjekk inn `map.json`, og køyr tidstabell-flyten på GitHub
+du lista, køyr `npm run timetable`, og køyr tidstabell-flyten på GitHub
 (Actions → Tidstabell → Run workflow) så `data`-grenen blir oppdatert.
 
 For å prøve færre linjer utan å endre koden, fyll ut feltet **lines** når du køyrer Tidstabell for hand (til dømes `20 31 63`).

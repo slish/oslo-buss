@@ -14,7 +14,6 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "map": "tsx scripts/build-map.ts",
     "deploy": "npm run build && wrangler deploy",
     "worker": "wrangler dev",
     "kartverket:download": "tsx scripts/kartverket/download.ts",
