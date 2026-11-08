@@ -282,10 +282,13 @@ canvas.addEventListener('pointerup', (e) => {
   choose(line ? { line } : {});
 });
 let hoverCheck = 0;
+let hoverDirty = false; // the pointer has moved since the last look
+canvas.addEventListener('pointermove', () => { hoverDirty = true; });
 /** The hand over something that can be clicked; looked up at most every 80 ms, since it projects every bus and stop. */
 function updateCursor(now: number): void {
-  if (!lastPointer || now - hoverCheck < 80) return;
+  if (!hoverDirty || !lastPointer || now - hoverCheck < 80) return;
   hoverCheck = now;
+  hoverDirty = false;
   canvas.style.cursor = picker.bus(lastPointer.x, lastPointer.y) || picker.stop(lastPointer.x, lastPointer.y) ? 'pointer' : 'grab';
 }
 

@@ -22,20 +22,24 @@ export class Picker {
   /** Meters over the ground where buses and stops are picked: their lights hover a little over the street. */
   static readonly LIFT = 3;
 
-  /** Where a scene point lands on the screen, in pixels; null behind the camera. */
-  private project(x: number, y: number, z: number): [number, number] | null {
+  private sx = 0;
+  private sy = 0;
+
+  /** Puts where a scene point lands on the screen (pixels) in sx, sy; false behind the camera. Allocates nothing: it runs for thousands of points. */
+  private project(x: number, y: number, z: number): boolean {
     this.v.set(x, y, z).project(this.w.camera);
-    if (this.v.z > 1) return null;
-    return [(this.v.x * 0.5 + 0.5) * window.innerWidth, (-this.v.y * 0.5 + 0.5) * window.innerHeight];
+    if (this.v.z > 1) return false;
+    this.sx = (this.v.x * 0.5 + 0.5) * window.innerWidth;
+    this.sy = (-this.v.y * 0.5 + 0.5) * window.innerHeight;
+    return true;
   }
 
   bus(cx: number, cy: number): Track | null {
     let best: Track | null = null, bestD = 18;
     for (const t of this.w.store.tracks.values()) {
       if (t.leaving || this.w.hidden(t.bus.line)) continue;
-      const p = this.project(t.x, this.w.ground(t.x, t.z) + Picker.LIFT, t.z);
-      if (!p) continue;
-      const d = Math.hypot(p[0] - cx, p[1] - cy);
+      if (!this.project(t.x, this.w.ground(t.x, t.z) + Picker.LIFT, t.z)) continue;
+      const d = Math.hypot(this.sx - cx, this.sy - cy);
       if (d < bestD) { best = t; bestD = d; }
     }
     return best;
@@ -44,9 +48,8 @@ export class Picker {
   stop(cx: number, cy: number): string | null {
     let best: string | null = null, bestD = 16;
     for (const s of this.w.stops) {
-      const p = this.project(s.x, this.w.ground(s.x, s.z) + Picker.LIFT, s.z);
-      if (!p) continue;
-      const d = Math.hypot(p[0] - cx, p[1] - cy);
+      if (!this.project(s.x, this.w.ground(s.x, s.z) + Picker.LIFT, s.z)) continue;
+      const d = Math.hypot(this.sx - cx, this.sy - cy);
       if (d < bestD) { best = s.id; bestD = d; }
     }
     return best;
@@ -56,16 +59,16 @@ export class Picker {
   line(cx: number, cy: number): string | null {
     let best: string | null = null, bestD = 10;
     for (const { position, line } of this.w.roads) {
-      let prev: [number, number] | null = null;
+      let px = 0, py = 0, have = false;
       for (let i = 0; i < position.count; i++) {
-        const p = this.project(position.getX(i), position.getY(i), position.getZ(i));
-        if (p && prev) {
-          const dx = p[0] - prev[0], dy = p[1] - prev[1], len2 = dx * dx + dy * dy;
-          const f = len2 > 0 ? Math.max(0, Math.min(1, ((cx - prev[0]) * dx + (cy - prev[1]) * dy) / len2)) : 0;
-          const d = Math.hypot(cx - (prev[0] + f * dx), cy - (prev[1] + f * dy));
+        const on = this.project(position.getX(i), position.getY(i), position.getZ(i));
+        if (on && have) {
+          const dx = this.sx - px, dy = this.sy - py, len2 = dx * dx + dy * dy;
+          const f = len2 > 0 ? Math.max(0, Math.min(1, ((cx - px) * dx + (cy - py) * dy) / len2)) : 0;
+          const d = Math.hypot(cx - (px + f * dx), cy - (py + f * dy));
           if (d < bestD) { bestD = d; best = line; }
         }
-        prev = p;
+        have = on; px = this.sx; py = this.sy;
       }
     }
     return best;
