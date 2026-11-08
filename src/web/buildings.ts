@@ -1,37 +1,7 @@
-// The map under the buses: roads as thin lines, buildings as dark blocks. Map data © OpenStreetMap contributors, ODbL.
+// Buildings as blocks: one mesh with the walls (shaded by the way they face, with windows) and the roofs. The outlines come from the map tiles.
 
-import { BufferAttribute, BufferGeometry, Color, DoubleSide, Group, LineBasicMaterial, LineSegments, Mesh, MeshBasicMaterial, ShapeUtils, Vector2 } from 'three';
-import { decodePoints, type MapFile } from '../shared/map';
-import { daylit, daylitLine } from './mapshader';
-
-/** Colour and opacity of each road class, from the big roads to the small streets. */
-const ROAD_STYLE: { color: string; opacity: number }[] = [
-  { color: '#4a64a0', opacity: 0.9 },
-  { color: '#3f568c', opacity: 0.8 },
-  { color: '#344a78', opacity: 0.7 },
-  { color: '#2b3d64', opacity: 0.6 },
-  { color: '#202f50', opacity: 0.5 },
-];
-
-export function buildRoads(map: MapFile): Group {
-  const group = new Group();
-  const perClass: number[][] = ROAD_STYLE.map(() => []);
-  for (const road of map.roads) {
-    const cls = road[0];
-    const pts = decodePoints(road, 1);
-    const out = perClass[cls] ?? perClass[perClass.length - 1];
-    for (let i = 0; i + 1 < pts.length; i++) out.push(pts[i][0], -1, pts[i][1], pts[i + 1][0], -1, pts[i + 1][1]);
-  }
-  perClass.forEach((positions, cls) => {
-    if (!positions.length) return;
-    const geometry = new BufferGeometry();
-    geometry.setAttribute('position', new BufferAttribute(new Float32Array(positions), 3));
-    const lines = new LineSegments(geometry, daylitLine(new LineBasicMaterial({ color: ROAD_STYLE[cls].color, transparent: true, opacity: ROAD_STYLE[cls].opacity })));
-    lines.frustumCulled = false;
-    group.add(lines);
-  });
-  return group;
-}
+import { BufferAttribute, BufferGeometry, Color, DoubleSide, Mesh, MeshBasicMaterial, ShapeUtils, Vector2 } from 'three';
+import { daylit } from './mapshader';
 
 /** Light from the south-west: walls turned toward it are brighter. Directions are in the scene's x (east) and z (south). */
 const SUN = { x: -0.55, z: 0.83 };
@@ -40,10 +10,6 @@ const SUN = { x: -0.55, z: 0.83 };
 export interface Block { ring: [number, number][]; height: number; base?: number; /** A convex quad: the roof needs no triangulation. */ quad?: boolean }
 
 /** One mesh with every building: walls shaded by the way they face, roofs lighter the taller the building is. */
-export function buildBuildings(map: MapFile): Mesh {
-  return extrudeBlocks(map.buildings.map((b) => ({ height: b[0] / 10, ring: decodePoints(b, 1) })));
-}
-
 export function extrudeBlocks(blocks: Block[]): Mesh {
   const positions: number[] = [];
   const colors: number[] = [];

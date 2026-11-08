@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { pointToSegment, SegmentIndex, simplifyXY, type XY } from '../src/shared/geom';
-import { buildingHeight, decodePoints, encodePoints, roadClass } from '../src/shared/map';
+import { buildingHeight } from '../src/shared/map';
 
 describe('geom', () => {
   it('simplifies a straight run to its ends and keeps a corner', () => {
@@ -25,21 +25,7 @@ describe('geom', () => {
   });
 });
 
-describe('map encoding', () => {
-  it('round-trips points to the decimeter, with negative coordinates', () => {
-    const pts: XY[] = [[-1203.4, 5521.9], [-1200.1, 5530.0], [15.5, -3.25]];
-    const flat = [7, ...encodePoints(pts)]; // a leading class or height, as in the file
-    const back = decodePoints(flat, 1);
-    back.forEach((p, i) => { expect(p[0]).toBeCloseTo(pts[i][0], 0); expect(p[1]).toBeCloseTo(pts[i][1], 0); });
-    expect(Math.abs(back[0][0] - pts[0][0])).toBeLessThanOrEqual(0.05);
-  });
-  it('classes roads and leaves out paths', () => {
-    expect(roadClass('motorway_link')).toBe(0);
-    expect(roadClass('primary')).toBe(1);
-    expect(roadClass('residential')).toBe(4);
-    expect(roadClass('footway')).toBe(-1);
-    expect(roadClass(undefined)).toBe(-1);
-  });
+describe('buildingHeight', () => {
   it('reads building heights from tags, or guesses from the kind', () => {
     expect(buildingHeight({ building: 'yes', height: '12.5 m'.replace(' m', '') })).toBe(12.5);
     expect(buildingHeight({ building: 'yes', 'building:levels': '5' })).toBeCloseTo(16.5);

@@ -154,19 +154,19 @@ npx tsx scripts/kartverket/build-tiles.ts  # lagar data-cache/tiles/ (--no-osm h
 npm test
 ```
 
-## Visaren (`?kart=kartverket`)
+## Visaren
 
-Valfri teikning av flisene i `src/web/kartverket.ts`. Standardutsjånaden og `public/data/map.json` er uendra.
+Flisene blir alltid teikna av `src/web/kartverket.ts`. Tre val styrer kva som er med: bakkefargane (`?kart=kartverket`), terrengmodellen (`&terreng=1`) og bygga (`&bygg=0` skjuler dei). Vegane er alltid med.
 
 ```bash
 npm run kartverket:tiles   # lagar data-cache/tiles/ (éin gong)
-npm run dev                # opne http://localhost:5173/?kart=kartverket   (legg til &terreng=1 for terrengmodus)
+npm run dev                # opne http://localhost:5173/   (legg til ?kart=kartverket for bakkefarge og &terreng=1 for terrengmodus)
 ```
 
-- Vite-mellomvaren `devTiles` i `vite.config.ts` serverer `data-cache/tiles/` som `/kartverket-tiles/` berre i dev (`apply: 'serve'`). Flisene er ikkje i git og ikkje i produksjonsbygget; utan flaggen blir ingenting henta.
+- Vite-mellomvaren `devTiles` i `vite.config.ts` serverer `data-cache/tiles/` som `/kartverket-tiles/` berre i dev (`apply: 'serve'`). Flisene er ikkje i git og ikkje i produksjonsbygget; i produksjon blir dei henta frå grenen `tiles` av deploy-flyten.
 - Fliser blir henta og frigjevne etter kameraet: radius = 2,2 × avstanden til målpunktet (5–16 km), maks 90 fliser og 4 samtidige hentingar, nærmaste først. Éin flis blir bygd per bilete.
 - Detaljnivå: store vegar og areal for alle lasta fliser; bygg, bygningspunkt, vegar i bustadgater og stiar berre for fliser innanfor 6,5 km frå kameraet.
-- Areal blir trianguleres (`ShapeUtils`, med hol) som flate meshar utan djupnetest, i klasserekkjefølgje, over ein dempa grunnfarge. Vegar er `LineSegments` per klasse. Bygg er ekstrudert omriss med høgd (delt `extrudeBlocks` i `basemap.ts`); bygningspunkt er 8×8 m-boksar.
+- Areal blir trianguleres (`ShapeUtils`, med hol) som flate meshar utan djupnetest, i klasserekkjefølgje, over ein dempa grunnfarge. Vegar er `LineSegments` per klasse. Bygg er ekstrudert omriss med høgd (`extrudeBlocks` i `buildings.ts`); bygningspunkt er 8×8 m-boksar.
 - `&terreng=1`: terrenget er eit skugga mesh med arealfarge i vertekssfargane; vegar, bygg, bussar, haldeplassar og linjene til bussane følgjer høgda (`heightAt`). Flat modus er standard.
 - Målt i Browser-ruta i Claude (maskin utan eigen GPU-måling): 60 fps både i oversynsbiletet (90 fliser) og i nærbilete i Oslo sentrum med terreng. Bygging per flis: terreng ≈ 30 ms, bygg ≈ 11 ms, areal ≈ 2 ms.
 

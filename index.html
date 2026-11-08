@@ -10,8 +10,9 @@
   <body>
     <canvas id="scene" aria-label="Kart over bussar i Oslo"></canvas>
     <header>
-      <h1>Oslo-buss</h1>
+      <div id="title"><h1>Oslo-buss</h1><button id="menu-toggle" type="button" aria-expanded="true" aria-controls="menu" aria-label="Meny" title="Vis eller skjul menyen">☰</button></div>
       <p id="status">Hentar bussar…</p>
+      <div id="menu">
       <button id="legend-toggle" type="button" aria-expanded="true" aria-controls="legend-body"><span class="arrow">▾</span> Linjer <span id="legend-count"></span></button>
       <div id="legend-body">
         <ul id="legend"></ul>
@@ -19,9 +20,10 @@
       </div>
       <p id="hour"><label for="tid">Klokka</label> <input id="tid" type="range" min="0" max="1439" step="5" value="720" /> <span id="tid-text"></span> <button id="tid-now" type="button" hidden>No</button></p>
       <div id="options" role="group" aria-label="Val for kartet">
-        <button id="opt-kart" type="button" aria-pressed="false">Kartverket-kart</button>
+        <button id="opt-kart" type="button" aria-pressed="false" title="Faktiske fargar på bakken (skog, vatn, tettstad) i staden for mørk bakgrunn">Bakkefarge</button>
         <button id="opt-forseinking" type="button" aria-pressed="false">Forseinking</button>
         <button id="opt-terreng" type="button" aria-pressed="false">Terreng</button>
+        <button id="opt-bygg" type="button" aria-pressed="true">Bygg</button>
         <button id="opt-gaa" type="button" aria-pressed="false" title="Stå på bakken og gå rundt (G). Alt + dobbeltklikk eller Enter set deg ned ved peikaren.">Gå</button>
       </div>
       <div id="delay-key" hidden>
@@ -29,6 +31,7 @@
         <div class="bar" aria-hidden="true"></div>
         <div class="ticks"><span>tidleg</span><span>i rute</span><span>3 min</span><span>5 min</span><span>10+ min</span></div>
         <p class="note"><span class="swatch"></span> grå: ingen sanntidsdata</p>
+      </div>
       </div>
     </header>
     <aside id="info" hidden></aside>
@@ -38,8 +41,8 @@
       Inneholder data under <a href="https://data.norge.no/nlod/en/2.0" target="_blank" rel="noopener">Norsk lisens for offentlige data (NLOD)</a>
       tilgjengeliggjort av Entur AS. Dataene er bearbeidet: posisjonar er berekna frå rutetabell og sanntidsforseinkingar, ikkje målte.
       Vêrdata frå <a href="https://api.met.no/" target="_blank" rel="noopener">MET Norway</a> (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>).
-      Kart © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap-bidragsytarar</a> (ODbL).
-      <span id="credit-kartverket" hidden>Kartdata © <a href="https://www.kartverket.no/api-og-data/vilkar-for-bruk" target="_blank" rel="noopener">Kartverket</a> (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>); høgder og enkelte bygg er berekna frå Kartverkets høgdemodell.</span>
+      Bygg © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap-bidragsytarar</a> (ODbL).
+      <span id="credit-kartverket">Kartdata © <a href="https://www.kartverket.no/api-og-data/vilkar-for-bruk" target="_blank" rel="noopener">Kartverket</a> (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>); høgder og enkelte bygg er berekna frå Kartverkets høgdemodell.</span>
     </footer>
     <script type="module" src="/src/web/main.ts"></script>
   </body>

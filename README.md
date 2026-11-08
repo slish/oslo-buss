@@ -21,8 +21,9 @@ Alle 97 bussliner som køyrer i Oslo og Bærum er med (`DEFAULT_LINES` i `script
 
 | Parameter | Verknad |
 |---|---|
-| `?kart=kartverket` | Kartverket-fliser (terreng, bygg, vegar) i staden for det enkle OSM-kartet. Same som knappen **Kartverket-kart** |
-| `&terreng=1` | Terrenget følgjer høgdemodellen. Same som knappen **Terreng** |
+| `?kart=kartverket` | Faktiske fargar på bakken (skog, vatn, tettstad) i staden for mørk bakgrunn. Same som knappen **Bakkefarge** |
+| `&terreng=1` | Terrenget følgjer høgdemodellen. Same som knappen **Terreng** (verkar òg utan bakkefarge) |
+| `&bygg=0` | Skjuler bygga. Same som å skru av knappen **Bygg** |
 | `&forseinking=1` | Forseinkingskartet. Same som knappen **Forseinking** |
 | `&tid=22:30` | Sett timen på døgnet (i dag), til dømes for å sjå natt midt på dagen |
 | `&vaer=klart\|sky\|regn\|sno\|kulde` | Set vêret for hand (`kulde` er −12 °C), til å teste når det røynlege vêret er kjedeleg |
@@ -32,7 +33,6 @@ Alle 97 bussliner som køyrer i Oslo og Bærum er med (`DEFAULT_LINES` i `script
 ```bash
 npm install
 npm run timetable   # lastar ned Entur sin GTFS for Ruter og lagar public/data/timetable.json (alle liner, ca. 2,8 MB)
-npm run map         # hentar vegar og bygg langs linjene frå OpenStreetMap (Overpass), lagar public/data/map.json
 npm run dev         # 3D-kartet på http://localhost:5173 (relayen og vêret køyrer inne i dev-tenaren)
 npm test            # vitest
 npm run typecheck
@@ -76,10 +76,11 @@ Dei store kartfilene (`data-cache/`) er ikkje i git. I dev blir flisene tenerte 
 | Fil | Innhald |
 |---|---|
 | `main.ts` | Scena, løkka og samanknyting: vegar og haldeplassar, klikk, sitt-på-bussen, forseinkingsmodus og gange |
-| `legend.ts`, `infopanel.ts`, `hour.ts` | Linjelista (skjul/vis), panelet for buss/haldeplass/linje, og glidaren for klokka |
+| `legend.ts`, `infopanel.ts`, `hour.ts`, `menu.ts` | Linjelista (skjul/vis), panelet for buss/haldeplass/linje, glidaren for klokka, og hamburgermenyen |
 | `picking.ts` | Kva peikaren er over: buss, haldeplass eller veg |
 | `mapcamera.ts` | Eige kamera: zoom mot peikaren utan fast mål, grip-og-dra, rotasjon, touch, og ride-modus |
 | `walk.ts` | Førstepersons gange: rein rørslelogikk (terrengfølging, kollisjon) og tastatur/mus/touch |
+| `buildings.ts` | Bygg som klossar (vegger med vindauge, tak) |
 | `kartverket.ts` | Fliser, terreng (grovt 20 m og fint 10 m nær bussen/deg), bygg, asfalt, snø per vertex |
 | `busmodel.ts`, `glow.ts` | 3D-bussmodellar (instansierte), lyspunkta, og overgangen mellom dei (plass til `MAX_BUSES` = 2048) |
 | `delay.ts` | Forseinking til farge og samandrag (reine funksjonar) |
@@ -107,7 +108,7 @@ Entur ber alle klientar sende `ET-Client-Name` (`firma-applikasjon`). Namnet st�
 Inneholder data under Norsk lisens for offentlige data (NLOD) tilgjengeliggjort av Entur AS
 ([lisens](https://data.norge.no/nlod/en/2.0)). Dataene er filtrert og bearbeidet.
 Vêrdata frå [MET Norway](https://api.met.no/) (CC BY 4.0 og NLOD 2.0).
-Kart © [OpenStreetMap-bidragsytarar](https://www.openstreetmap.org/copyright) (ODbL), henta via Overpass.
+Bygg © [OpenStreetMap-bidragsytarar](https://www.openstreetmap.org/copyright) (ODbL), henta via Overpass.
 Kartfliser frå Kartverket (`docs/KARTVERKET.md`): Kartdata © Kartverket (CC BY 4.0).
 Fanprosjekt, ikkje tilknytt eller støtta av Ruter, Entur, Kartverket eller MET. Sjå `NOTICE.md`.
 

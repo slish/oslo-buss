@@ -44,6 +44,9 @@ export function daylitLine<T extends Material & { color: Color }>(material: T): 
   return material;
 }
 
+/** Meters from floor to floor in the windows of the walls. Measured on buildings of known floors: the heights in the data give about 4 m a floor, so 3.2 gave a fourth too many. */
+export const FLOOR_HEIGHT = 4;
+
 function patch(material: Material, mode: Surface | 'line', snow: number): void {
   material.onBeforeCompile = (shader) => {
     shader.uniforms.uTint = tintUniform;
@@ -81,10 +84,10 @@ diffuseColor.rgb *= uTint;
   }
 }${mode === 'walls' ? `
 {
-  // Walls get windows: a grid of 3 m by 3.2 m cells, some of them lit when it is dark. The position along the wall comes from the
+  // Walls get windows: a grid of 3 m by a floor high (FLOOR_HEIGHT) cells, some of them lit when it is dark. The position along the wall comes from the
   // building (a small number), not from the world, so that the pattern stays still when the camera moves.
   if (vWall.y > 0.5 && uWindows > 0.0) {
-    vec2 g = vec2(vWall.x / 3.0, vHeight / 3.2);
+    vec2 g = vec2(vWall.x / 3.0, vHeight / ${FLOOR_HEIGHT.toFixed(1)});
     vec2 cell = floor(g), f = fract(g), fw = fwidth(g) + 1e-4;
     // Soft edges (one pixel wide), and far away, where a window is smaller than a pixel, the average of the pattern instead.
     float ax = smoothstep(0.2, 0.2 + fw.x, f.x) * (1.0 - smoothstep(0.8, 0.8 + fw.x, f.x));

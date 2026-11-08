@@ -1,6 +1,6 @@
 // Building outlines from OpenStreetMap for all the tiles of data-cache/tiles, kept in data-cache/osm-buildings/ (git-ignored).
-// Map data © OpenStreetMap contributors, ODbL. Same cells and manners as scripts/build-map.ts: small cells, one request at
-// a time with a pause, retries with growing waits and three mirrors, and every answer is kept so that each cell is asked for once.
+// Map data © OpenStreetMap contributors, ODbL. Small cells, one request at a time with a pause, retries with
+// growing waits and three mirrors (scripts/overpass.ts), and every answer is kept so that each cell is asked for once.
 //
 //   npx tsx scripts/kartverket/osm.ts      (asks for the missing cells; safe to stop and run again)
 
@@ -12,8 +12,6 @@ import { overpass, PAUSE_MS, sleep, type OsmWay } from '../overpass';
 export type { OsmWay };
 
 export const OSM_DIR = 'data-cache/osm-buildings';
-/** The cells of scripts/build-map.ts; its answers (roads and buildings) are reused where they exist. */
-export const OLD_DIR = 'data-cache/osm';
 export const CELL_LAT = 0.02, CELL_LON = 0.04;
 
 /** The cells (i, j) of the grid that the tiles in data-cache/tiles/index.json touch. */
@@ -30,12 +28,10 @@ export function cellsOfTiles(tiles: string[]): { i: number; j: number }[] {
   return [...out.values()];
 }
 
-/** Ways with a `building` tag in a cell: from the answers kept by either script, or asked for. */
+/** Ways with a `building` tag in a cell: from the answers kept, or asked for. */
 export async function cell(i: number, j: number, ask = true): Promise<OsmWay[]> {
-  for (const dir of [OSM_DIR, OLD_DIR]) {
-    const path = `${dir}/${i}_${j}.json`;
-    if (existsSync(path)) return (JSON.parse(readFileSync(path, 'utf8')) as OsmWay[]).filter((w) => w.tags.building !== undefined);
-  }
+  const path = `${OSM_DIR}/${i}_${j}.json`;
+  if (existsSync(path)) return (JSON.parse(readFileSync(path, 'utf8')) as OsmWay[]).filter((w) => w.tags.building !== undefined);
   if (!ask) return [];
   const s = i * CELL_LAT, w = j * CELL_LON, box = `${s},${w},${s + CELL_LAT},${w + CELL_LON}`;
   const elements = await overpass(`[out:json][timeout:90];way["building"](${box});out geom tags;`, 12);
@@ -56,7 +52,7 @@ if (/kartverket[/\\]osm\.ts$/.test(process.argv[1] ?? '')) {
   console.log(`${cells.length} cells`);
   let n = 0, total = 0;
   for (const c of cells) {
-    const had = existsSync(`${OSM_DIR}/${c.i}_${c.j}.json`) || existsSync(`${OLD_DIR}/${c.i}_${c.j}.json`);
+    const had = existsSync(`${OSM_DIR}/${c.i}_${c.j}.json`);
     const ways = await cell(c.i, c.j);
     total += ways.length;
     console.log(`cell ${++n}/${cells.length}${had ? ' (kept)' : ''}: ${ways.length} buildings`);
