@@ -1,7 +1,7 @@
 // Points of light: soft discs, added together so crowded places glow brighter. The size is in meters on the ground,
 // so a bus is the same size as the street it is on whatever the zoom, but never smaller than `minPx` on the screen.
 
-import { AdditiveBlending, BufferAttribute, BufferGeometry, Color, Points, ShaderMaterial } from 'three';
+import { AdditiveBlending, DynamicDrawUsage, BufferAttribute, BufferGeometry, Color, Points, ShaderMaterial } from 'three';
 
 const vertex = /* glsl */ `
 attribute float aSize;
@@ -46,7 +46,7 @@ export class Glow {
     this.color = new BufferAttribute(new Float32Array(capacity * 3), 3);
     this.size = new BufferAttribute(new Float32Array(capacity), 1);
     this.alpha = new BufferAttribute(new Float32Array(capacity), 1);
-    for (const a of [this.position, this.color, this.size, this.alpha]) a.setUsage(35048 /* DynamicDrawUsage */);
+    for (const a of [this.position, this.color, this.size, this.alpha]) a.setUsage(DynamicDrawUsage);
     geometry.setAttribute('position', this.position);
     geometry.setAttribute('aColor', this.color);
     geometry.setAttribute('aSize', this.size);

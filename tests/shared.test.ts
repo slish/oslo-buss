@@ -196,6 +196,17 @@ describe('BusFeed', () => {
     clock += 5_000; await f.get();
     expect(calls).toBe(2); // the failure is not retried at once
   });
+  it('places the buses once for the answers of the same two seconds', async () => {
+    let clock = now;
+    const f = new BusFeed(tt, { fetcher: reply(feed(entity('a', trip.id, [stopUpdate(1, 'A', undefined, { delay: 120 })]))), now: () => clock });
+    const first = await f.get();
+    clock += 1_000;
+    expect(await f.get()).toBe(first);
+    clock += 2_000;
+    const later = await f.get();
+    expect(later).not.toBe(first);
+    expect(later.at).toBe(clock);
+  });
   it('falls back to the plain timetable once the copy is too old', async () => {
     let clock = now;
     const ok = (async () => new Response(feed(entity("a", trip.id, [stopUpdate(1, "A", undefined, { delay: 120 })])) as BodyInit)) as typeof fetch;

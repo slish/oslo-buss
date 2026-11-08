@@ -75,16 +75,20 @@ Dei store kartfilene (`data-cache/`) er ikkje i git. I dev blir flisene tenerte 
 
 | Fil | Innhald |
 |---|---|
-| `main.ts` | Scena, løkka, legenda, klikk/info, sitt-på-bussen, forseinkingsmodus og samanknyting |
+| `main.ts` | Scena, løkka og samanknyting: vegar og haldeplassar, klikk, sitt-på-bussen, forseinkingsmodus og gange |
+| `legend.ts`, `infopanel.ts`, `hour.ts` | Linjelista (skjul/vis), panelet for buss/haldeplass/linje, og glidaren for klokka |
+| `picking.ts` | Kva peikaren er over: buss, haldeplass eller veg |
 | `mapcamera.ts` | Eige kamera: zoom mot peikaren utan fast mål, grip-og-dra, rotasjon, touch, og ride-modus |
 | `walk.ts` | Førstepersons gange: rein rørslelogikk (terrengfølging, kollisjon) og tastatur/mus/touch |
 | `kartverket.ts` | Fliser, terreng (grovt 20 m og fint 10 m nær bussen/deg), bygg, asfalt, snø per vertex |
-| `busmodel.ts`, `glow.ts` | 3D-bussmodellar (instansierte), lyspunkta, og overgangen mellom dei |
+| `busmodel.ts`, `glow.ts` | 3D-bussmodellar (instansierte), lyspunkta, og overgangen mellom dei (plass til `MAX_BUSES` = 2048) |
 | `delay.ts` | Forseinking til farge og samandrag (reine funksjonar) |
-| `daylight.ts`, `sky.ts` | Fargane og lyset i timen, tint og snø på kartet, vindauge i veggane, og himmelen (éin shader) |
+| `daylight.ts` | Lyset i timen: himmelfargar, tint, vindauge og lyset på bussmodellane |
+| `mapshader.ts` | Shader-lappen som legg tint, snø og opplyste vindauge på kartet sine materiale |
+| `sky.ts` | Himmelen (éin shader): gradient, sol, måne, stjerner, skyer |
 | `weather.ts`, `precip.ts` | Vêret i sida (mjuk overgang), og regn og snø rundt kameraet (partiklar flytta i shaderen) |
 
-`src/shared/sun.ts` reknar sol og måne, `src/shared/weather.ts` reduserer MET-svaret, og `src/shared/tiles.ts` er fliseformatet (2 km fliser, desimeter-varintar).
+`src/shared/sun.ts` reknar sol og måne, `src/shared/weather.ts` reduserer MET-svaret, `src/shared/tiles.ts` er fliseformatet (2 km fliser, desimeter-varintar), og `src/shared/geom.ts` har dei geometriske hjelparane (forenkling, punkt i ring, byggekonturar). Skripta deler éin Overpass-klient i `scripts/overpass.ts`. Relayen deler utrekninga av bussane mellom svar innanfor to sekund.
 
 Kartverket-fliser og alt om dei står i `docs/KARTVERKET.md`. Kartverket sine data er CC BY 4.0. Flyfoto («Norge i bilder») er ikkje brukt, fordi lisensen (Norge digitalt) ikkje passar.
 

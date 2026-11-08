@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { EYE_HEIGHT, RUN_SPEED, WALK_SPEED, footprintOf, insideAny, lookBy, lookDirection, pointInRing, slide, startWalk, stepWalk } from '../src/web/walk';
+import { EYE_HEIGHT, RUN_SPEED, WALK_SPEED, lookBy, lookDirection, slide, startWalk, stepWalk } from '../src/web/walk';
+import { footprintOf, insideAny, pointInRing } from '../src/shared/geom';
 import type { Ground, WalkState } from '../src/web/walk';
 
 const flat = () => 0;

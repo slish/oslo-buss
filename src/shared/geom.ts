@@ -1,4 +1,4 @@
-// Plane geometry in meters, for the map data: simplifying lines, and asking how far a point is from a set of lines.
+// Plane geometry in meters, for the map data: simplifying lines, asking how far a point is from a set of lines, and what lies inside a ring.
 
 export type XY = [number, number];
 
@@ -68,4 +68,28 @@ export function pointToSegment(px: number, py: number, ax: number, ay: number, b
   const len2 = dx * dx + dy * dy;
   const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len2));
   return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+}
+
+/** Even-odd test of a point against a ring (open or closed). */
+export function pointInRing(x: number, z: number, ring: readonly (readonly [number, number])[]): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, zi] = ring[i], [xj, zj] = ring[j];
+    if ((zi > z) !== (zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+/** A ring with its bounding box, so that most points are ruled out by four comparisons. */
+export interface Footprint { minX: number; maxX: number; minZ: number; maxZ: number; ring: readonly (readonly [number, number])[] }
+
+export function footprintOf(ring: Footprint['ring']): Footprint {
+  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+  for (const [x, z] of ring) { minX = Math.min(minX, x); maxX = Math.max(maxX, x); minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z); }
+  return { minX, maxX, minZ, maxZ, ring };
+}
+
+export function insideAny(x: number, z: number, list: readonly Footprint[]): boolean {
+  for (const f of list) if (x >= f.minX && x <= f.maxX && z >= f.minZ && z <= f.maxZ && pointInRing(x, z, f.ring)) return true;
+  return false;
 }

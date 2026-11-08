@@ -9,9 +9,9 @@ import {
 } from 'three';
 import { decodeTile, TILE_SIZE, tileName, type Tile, type XY } from '../shared/tiles';
 import { extrudeBlocks, type Block } from './basemap';
-import { daylit, daylitLine, SNOW_BY_CLASS } from './daylight';
+import { daylit, daylitLine, SNOW_BY_CLASS } from './mapshader';
 import { upsample2 } from '../shared/terrain';
-import { footprintOf, insideAny, type Footprint } from './walk';
+import { footprintOf, insideAny, pointInRing, type Footprint } from '../shared/geom';
 import { rideColor, ASPHALT, GRAVEL, noise } from './terrainstyle';
 
 const BASE = '/kartverket-tiles/';
@@ -66,10 +66,8 @@ export class KartverketMap {
   private ride = false;
   private readonly restyle: Loaded[] = [];
   private readonly fineReady: { l: Loaded; tile: Tile }[] = [];
-  credit = '';
   /** Counts up whenever tiles come or go, for those who sample heightAt. */
   version = 0;
-  stats = { loaded: 0, loading: 0, triangles: 0 };
 
   constructor(readonly options: KartOptions) {
     this.group.name = 'kartverket';
@@ -79,9 +77,8 @@ export class KartverketMap {
   async start(): Promise<void> {
     const r = await fetch(`${BASE}index.json`);
     if (!r.ok) throw new Error(`Fann ikkje ${BASE}index.json (${r.status}): køyr npm run kartverket:tiles`);
-    const index = (await r.json()) as { tiles: Record<string, number>; credit: string };
+    const index = (await r.json()) as { tiles: Record<string, number> };
     for (const name of Object.keys(index.tiles)) this.index.add(name);
-    this.credit = index.credit;
   }
 
   /** Height of the terrain model at a scene point in meters; 0 where there is none or terrain is off. */
@@ -236,8 +233,6 @@ export class KartverketMap {
       const near = this.nearCamera(l.tile, camera);
       if (near !== l.near) this.setDetail(l, near);
     }
-    this.stats.loaded = this.tiles.size;
-    this.stats.loading = this.loading.size;
   }
 
   private nearCamera(tile: Tile, camera: Camera): boolean {
@@ -508,22 +503,13 @@ function polygons(rings: XY[][]): XY[][][] {
   return out;
 }
 
-function inside(x: number, z: number, r: XY[]): boolean {
-  let c = false;
-  for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
-    const a = r[i], b = r[j];
-    if ((a[1] > z) !== (b[1] > z) && x < ((b[0] - a[0]) * (z - a[1])) / (b[1] - a[1]) + a[0]) c = !c;
-  }
-  return c;
-}
-
 /** The land cover class at a point (the topmost wins), or -1 where nothing covers it. */
 function areaClassAt(tile: Tile, x: number, z: number): number {
   let cls = -1;
   for (const a of tile.areas) {
     if (a.cls < cls) continue;
     let n = 0;
-    for (const r of a.rings) if (inside(x, z, r)) n++;
+    for (const r of a.rings) if (pointInRing(x, z, r)) n++;
     if (n % 2 === 1) cls = a.cls;
   }
   return cls;

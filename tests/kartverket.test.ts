@@ -2,7 +2,8 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { clipLine, clipRing, pointInRing, ringArea } from '../scripts/kartverket/clip';
+import { clipLine, clipRing, ringArea } from '../scripts/kartverket/clip';
+import { pointInRing } from '../src/shared/geom';
 import { HeightField, readFloatTiff } from '../scripts/kartverket/geotiff';
 import { field, lineStrings, members, parsePosList, surfaceRings } from '../scripts/kartverket/gml';
 
