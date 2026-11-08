@@ -10,6 +10,7 @@ import {
 import { decodeTile, TILE_SIZE, tileName, type Tile, type XY } from '../shared/tiles';
 import { extrudeBlocks, type Block } from './buildings';
 import { daylit, daylitLine, SNOW_BY_CLASS } from './mapshader';
+import { roofOf } from '../shared/roof';
 import { upsample2 } from '../shared/terrain';
 import { footprintOf, insideAny, pointInRing, type Footprint } from '../shared/geom';
 import { rideColor, ASPHALT, GRAVEL, noise } from './terrainstyle';
@@ -428,7 +429,9 @@ export class KartverketMap {
   private buildingMesh(tile: Tile): Object3D | undefined {
     const blocks: Block[] = [];
     for (const b of tile.buildings) {
-      blocks.push(this.onGround(b.ring, b.height / 10));
+      const block = this.onGround(b.ring, b.height / 10);
+      block.roof = roofOf(b.roof ?? 0, b.ring, b.height / 10, b.type);
+      blocks.push(block);
     }
     const h = POINT_SIZE / 2;
     for (const p of tile.points) {

@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import { join } from 'node:path';
 import { brotliCompressSync, gzipSync } from 'node:zlib';
 import proj4 from 'proj4';
+import { roofCodeOf, type RoofCode } from '../../src/shared/roof';
 import { simplifyXY } from '../../src/shared/geom';
 import { buildingHeight } from '../../src/shared/map';
 import { AREA_CLASSES, ROAD_CLASSES, TILE_SIZE, encodeTile, tileName, type Tile, type TileIndex, type XY } from '../../src/shared/tiles';
@@ -283,7 +284,7 @@ export function osmTagHeight(tags: Record<string, string>): number | undefined {
 async function mergeOsm(st: Stats) {
   const cells = cellsOfTiles([...tiles.values()].map((t) => tileName(t.ix, t.iz)));
   const seen = new Set<number>();
-  const found: { ring: XY[]; height: number; heightSource: 0 | 1 | 2 }[] = [];
+  const found: { ring: XY[]; height: number; heightSource: 0 | 1 | 2; roof: RoofCode }[] = [];
   for (const c of cells) {
     for (const w of await cell(c.i, c.j, false)) {
       if (seen.has(w.id)) continue;
@@ -305,7 +306,7 @@ async function mergeOsm(st: Stats) {
         heightSource = 1;
         if (height === undefined) { height = buildingHeight(w.tags); heightSource = 0; }
       }
-      found.push({ ring, height, heightSource });
+      found.push({ ring, height, heightSource, roof: roofCodeOf(w.tags['roof:shape']) });
       st.osmBuildings++;
       if (heightSource === 2) st.osmHeightFromTag++; else if (heightSource === 1) st.osmHeightFromModel++;
     }
@@ -329,7 +330,7 @@ async function mergeOsm(st: Stats) {
   }
   for (const f of found) {
     const [cx, cz] = centroidOf(f.ring);
-    tileAt(Math.floor(cx / TILE_SIZE), Math.floor(cz / TILE_SIZE)).buildings.push({ height: Math.round(f.height * 10), heightSource: f.heightSource, type: 0, osm: true, ring: f.ring });
+    tileAt(Math.floor(cx / TILE_SIZE), Math.floor(cz / TILE_SIZE)).buildings.push({ height: Math.round(f.height * 10), heightSource: f.heightSource, type: 0, osm: true, ...(f.roof ? { roof: f.roof } : {}), ring: f.ring });
   }
 }
 interface Stats {
