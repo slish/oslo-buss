@@ -7,6 +7,8 @@
 export const TILE_SIZE = 2000;
 export const TILE_VERSION = 1;
 
+import type { RoofCode } from './roof';
+
 export type XY = [number, number];
 
 /** Land cover classes in draw order: later ones are drawn on top of earlier ones. */
@@ -23,6 +25,8 @@ export interface TileBuilding {
   osm?: boolean;
   /** Building type code (NS 3457) from the national building register, 0 if unknown. */
   type: number;
+  /** The shape of the roof from OpenStreetMap's roof:shape (see roof.ts); absent or 0 when not known. */
+  roof?: RoofCode;
   /** The outline in meters; the ring is open: the last point is not the first. */
   ring: XY[];
 }
@@ -50,7 +54,7 @@ export interface Tile {
 }
 
 const MAGIC = [0x4f, 0x42, 0x54, 0x31]; // "OBT1"
-const SEC_BUILDINGS = 1, SEC_POINTS = 2, SEC_ROADS = 3, SEC_AREAS = 4, SEC_TERRAIN = 5, SEC_OSM_BUILDINGS = 6; // 6: like 1, for the outlines from OpenStreetMap, so that the two licences stay apart
+const SEC_BUILDINGS = 1, SEC_POINTS = 2, SEC_ROADS = 3, SEC_AREAS = 4, SEC_TERRAIN = 5, SEC_OSM_BUILDINGS = 6, SEC_ROOFS = 7; // 6: like 1, for the outlines from OpenStreetMap, so that the two licences stay apart
 
 export const tileOf = (x: number, z: number): [number, number] => [Math.floor(x / TILE_SIZE), Math.floor(z / TILE_SIZE)];
 export const tileName = (ix: number, iz: number) => `${ix}_${iz}.bin`;
@@ -132,13 +136,18 @@ export function encodeTile(tile: Tile): Uint8Array {
     fill(s);
     w.u8(id); w.uvar(s.length); w.bytes(s.done());
   };
+  const written: TileBuilding[] = [];
   for (const [id, osm] of [[SEC_BUILDINGS, false], [SEC_OSM_BUILDINGS, true]] as const) {
     const list = tile.buildings.filter((b) => Boolean(b.osm) === osm);
+    written.push(...list);
     if (list.length) section(id, (s) => {
       s.uvar(list.length);
       for (const b of list) { s.uvar(b.height); s.u8(b.heightSource); s.uvar(b.type); writePoints(s, b.ring, ox, oz); }
     });
   }
+  // Roof shapes, by the place of the building in the two sections above; only buildings that have one.
+  const roofs = written.flatMap((b, i) => (b.roof ? [[i, b.roof] as const] : []));
+  if (roofs.length) section(SEC_ROOFS, (s) => { s.uvar(roofs.length); for (const [i, code] of roofs) { s.uvar(i); s.u8(code); } });
   if (tile.points.length) section(SEC_POINTS, (s) => {
     s.uvar(tile.points.length);
     let px = 0, pz = 0;
@@ -171,6 +180,7 @@ export function decodeTile(data: Uint8Array): Tile {
   if (version !== TILE_VERSION) throw new Error(`tile: unknown version ${version}`);
   const tile: Tile = { ix: r.svar(), iz: r.svar(), buildings: [], points: [], roads: [], areas: [] };
   const ox = tile.ix * TILE_SIZE, oz = tile.iz * TILE_SIZE;
+  const roofs: [number, RoofCode][] = [];
   while (!r.end) {
     const id = r.u8();
     const s = new Reader(r.slice(r.uvar()));
@@ -183,6 +193,11 @@ export function decodeTile(data: Uint8Array): Tile {
           if (id === SEC_OSM_BUILDINGS) b.osm = true;
           tile.buildings.push(b);
         }
+        break;
+      }
+      case SEC_ROOFS: {
+        const n = s.uvar();
+        for (let i = 0; i < n; i++) roofs.push([s.uvar(), s.u8() as RoofCode]);
         break;
       }
       case SEC_POINTS: {
@@ -218,6 +233,7 @@ export function decodeTile(data: Uint8Array): Tile {
       }
     }
   }
+  for (const [i, code] of roofs) if (tile.buildings[i]) tile.buildings[i].roof = code;
   return tile;
 }
 

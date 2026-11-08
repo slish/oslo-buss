@@ -37,7 +37,7 @@ export async function cell(i: number, j: number, ask = true): Promise<OsmWay[]> 
   const elements = await overpass(`[out:json][timeout:90];way["building"](${box});out geom tags;`, 12);
   const slim: OsmWay[] = elements.filter((x) => x.geometry?.length).map((x) => {
     const t = x.tags ?? {}, tags: Record<string, string> = {};
-    for (const k of ['building', 'height', 'building:levels', 'building:part', 'min_height']) if (t[k] !== undefined) tags[k] = t[k];
+    for (const k of ['building', 'height', 'building:levels', 'building:part', 'min_height', 'roof:shape']) if (t[k] !== undefined) tags[k] = t[k];
     return { id: x.id, tags, geometry: x.geometry.map((p) => ({ lat: Math.round(p.lat * 1e6) / 1e6, lon: Math.round(p.lon * 1e6) / 1e6 })) };
   });
   mkdirSync(OSM_DIR, { recursive: true });
