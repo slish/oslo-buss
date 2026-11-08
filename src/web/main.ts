@@ -3,17 +3,20 @@ import { MapCamera } from './mapcamera';
 import type { MapFile } from '../shared/map';
 import { buildBuildings, buildRoads } from './basemap';
 import { Glow } from './glow';
-import { BusModels, BUS_LENGTH, modelness } from './busmodel';
+import { BusModels, BUS_LENGTH, MAX_BUSES, modelness } from './busmodel';
 import { BusStore, type Track } from './store';
 import type { KartverketMap } from './kartverket';
 import { colorOf, toX, toZ } from './world';
-import { linesAt, lineInfo, nextDepartures } from '../shared/departures';
-import { osloEpoch, osloTime } from '../shared/time';
 import { SkyDome } from './sky';
-import { applyLight, applySnow, lightAt, snowCover } from './daylight';
+import { lightAt } from './daylight';
+import { applyLight, applySnow, snowCover } from './mapshader';
 import { WeatherFeed } from './weather';
 import { Precip } from './precip';
-import { delayColor, delayLabel, summarize } from './delay';
+import { delayColor, summarize } from './delay';
+import { HourControl } from './hour';
+import { Legend } from './legend';
+import { InfoPanel } from './infopanel';
+import { Picker } from './picking';
 
 const BUS_SIZE = 420; // meters across on the ground
 const STOP_SIZE = 70;
@@ -22,8 +25,6 @@ const RIDE_FOV = 70; // from the seat: wide, like an eye, so that the road and t
 
 const canvas = document.querySelector<HTMLCanvasElement>('#scene')!;
 const statusEl = document.querySelector<HTMLElement>('#status')!;
-const legendEl = document.querySelector<HTMLUListElement>('#legend')!;
-const infoEl = document.querySelector<HTMLElement>('#info')!;
 
 const renderer = new WebGLRenderer({ canvas, antialias: true });
 const scene = new Scene();
@@ -44,9 +45,8 @@ const file = store.timetable.file;
 
 // ---- the roads of the lines and their stops ----
 const LINE_OPACITY = file.lines.length > 15 ? 0.3 : 0.5; // many roads add up to white
-const shapeLines: { position: Float32BufferAttribute }[] = [];
+const shapeLines: { position: Float32BufferAttribute; line: string | null }[] = [];
 const lineMaterials = new Map<string, LineBasicMaterial[]>();
-const shapeIds: string[] = [];
 const roads: Line[] = []; // the colored roads of the lines
 const lineOfShape = new Map<string, string>();
 for (const p of file.patterns) lineOfShape.set(p.shape, file.lines[p.line].name);
@@ -62,8 +62,7 @@ for (const [id, shape] of store.timetable.shapes) {
   const geometry = new BufferGeometry();
   const position = new Float32BufferAttribute(points, 3);
   geometry.setAttribute('position', position);
-  shapeLines.push({ position });
-  shapeIds.push(id);
+  shapeLines.push({ position, line: lineOfShape.get(id) ?? null });
   const material = new LineBasicMaterial({ color: colorOf(lineOfShape.get(id) ?? ''), transparent: true, opacity: LINE_OPACITY, blending: AdditiveBlending, depthWrite: false, depthTest: false, fog: false });
   const lineName = lineOfShape.get(id) ?? '';
   lineMaterials.set(lineName, [...(lineMaterials.get(lineName) ?? []), material]);
@@ -93,7 +92,7 @@ scene.add(stops.points);
 const mark = new Glow(1, 7); // a halo on the chosen stop
 mark.points.renderOrder = 2;
 scene.add(mark.points);
-const buses = new Glow(512, 9);
+const buses = new Glow(MAX_BUSES, 9);
 buses.points.renderOrder = 3;
 scene.add(buses.points);
 const busModels = new BusModels(scene);
@@ -144,29 +143,8 @@ if (useKart) {
 })();
 
 // ---- the hour ----
-// The sky follows the clock; ?tid=22:30 or the slider shows another hour of today. "No" lets it follow the clock again.
-let skyTime: number | null = null;
-const tidEl = document.querySelector<HTMLInputElement>('#tid')!;
-const tidText = document.querySelector<HTMLElement>('#tid-text')!;
-const tidNow = document.querySelector<HTMLButtonElement>('#tid-now')!;
-function setHour(minutes: number | null): void {
-  skyTime = minutes === null ? null : osloEpoch(osloTime(Date.now()).date, minutes * 60);
-  showHour();
-}
-function showHour(): void {
-  const t = osloTime(skyTime ?? Date.now());
-  const minutes = Math.floor(t.secs / 60);
-  if (skyTime === null) tidEl.value = String(minutes);
-  tidText.textContent = String(Math.floor(minutes / 60)).padStart(2, '0') + ':' + String(minutes % 60).padStart(2, '0');
-  tidNow.hidden = skyTime === null;
-}
-tidEl.addEventListener('input', () => setHour(Number(tidEl.value)));
-tidNow.addEventListener('click', () => setHour(null));
-{
-  const m = /^(\d{1,2}):(\d{2})$/.exec(new URLSearchParams(location.search).get('tid') ?? '');
-  if (m) { tidEl.value = String(Number(m[1]) * 60 + Number(m[2])); setHour(Number(tidEl.value)); } else showHour();
-}
-setInterval(() => { if (skyTime === null) showHour(); }, 30_000);
+// The sky follows the clock; ?tid=22:30 or the slider shows another hour of today (hour.ts).
+const hour = new HourControl(new URLSearchParams(location.search).get('tid'));
 // The weather: cloud covers the sky and dulls the light, rain and snow fall around the camera, and the far hills fade into the haze.
 const weather = new WeatherFeed(new URLSearchParams(location.search).get('vaer'));
 const precip = new Precip();
@@ -223,37 +201,11 @@ window.addEventListener('resize', resize);
 resize();
 
 // ---- legend ----
-// The list of lines can be folded away; on a phone it starts folded, so it does not cover the map.
-const legendBody = document.querySelector<HTMLElement>('#legend-body')!;
-const legendToggle = document.querySelector<HTMLButtonElement>('#legend-toggle')!;
-function foldLegend(fold: boolean): void {
-  legendBody.hidden = fold;
-  legendToggle.setAttribute('aria-expanded', String(!fold));
-  legendToggle.querySelector('.arrow')!.textContent = fold ? '▸' : '▾';
-}
-legendToggle.addEventListener('click', () => foldLegend(!legendBody.hidden));
-foldLegend(window.matchMedia('(max-width: 560px)').matches);
-document.querySelector('#legend-count')!.textContent = '(' + file.lines.length + ')';
-const hiddenLines = new Set<string>();
-const legendItems = new Map<string, HTMLLIElement>();
 function applyLineVisibility(): void {
-  for (const [name, li] of legendItems) li.classList.toggle('off', hiddenLines.has(name));
-  for (const [name, materials] of lineMaterials) for (const material of materials) material.visible = !hiddenLines.has(name);
-  if (selected && hiddenLines.has(store.tracks.get(selected)?.bus.line ?? '')) choose({});
+  for (const [name, materials] of lineMaterials) for (const material of materials) material.visible = !legend.isHidden(name);
+  if (selected && legend.isHidden(store.tracks.get(selected)?.bus.line ?? '')) choose({});
 }
-document.querySelector('#lines-all')!.addEventListener('click', () => { hiddenLines.clear(); applyLineVisibility(); });
-document.querySelector('#lines-none')!.addEventListener('click', () => { for (const l of file.lines) hiddenLines.add(l.name); applyLineVisibility(); });
-for (const line of [...file.lines].sort((a, b) => parseInt(a.name) - parseInt(b.name) || a.name.localeCompare(b.name))) {
-  const li = document.createElement('li');
-  li.title = 'Klikk for å skjule eller vise linja';
-  li.addEventListener('click', () => { if (hiddenLines.has(line.name)) hiddenLines.delete(line.name); else hiddenLines.add(line.name); applyLineVisibility(); });
-  legendItems.set(line.name, li);
-  li.style.color = colorOf(line.name);
-  li.innerHTML = `<span class="dot"></span><span class="name"></span><span class="long"></span>`;
-  li.querySelector('.name')!.textContent = line.name;
-  li.querySelector('.long')!.textContent = line.long;
-  legendEl.append(li);
-}
+const legend = new Legend(file.lines, applyLineVisibility);
 
 // ---- picking: the bus nearest the pointer on the screen ----
 let selected: string | null = null; // a bus
@@ -314,133 +266,33 @@ addEventListener('keydown', (e) => {
   else if (e.key === 'Escape' && controls.walking) controls.stopWalking();
   else if ((e.key === 'b' || e.key === 'B') && controls.walking) { walls = !walls; walkHint.dataset.walls = String(walls); }
 });
-const screen = new Vector3();
-function busAt(clientX: number, clientY: number): Track | null {
-  let best: Track | null = null, bestD = 18; // pixels
-  for (const t of store.tracks.values()) {
-    if (t.leaving || hiddenLines.has(t.bus.line)) continue;
-    screen.set(t.x, (kart?.heightAt(t.x, t.z) ?? 0) + 3, t.z).project(camera);
-    if (screen.z > 1) continue;
-    const d = Math.hypot((screen.x * 0.5 + 0.5) * window.innerWidth - clientX, (-screen.y * 0.5 + 0.5) * window.innerHeight - clientY);
-    if (d < bestD) { best = t; bestD = d; }
-  }
-  return best;
-}
-const stopHeight = (x: number, z: number) => (kart?.heightAt(x, z) ?? 0) + 3;
-function stopAt(clientX: number, clientY: number): string | null {
-  let best: string | null = null, bestD = 16;
-  stopXZ.forEach(([x, z], i) => {
-    screen.set(x, stopHeight(x, z), z).project(camera);
-    if (screen.z > 1) return;
-    const d = Math.hypot((screen.x * 0.5 + 0.5) * window.innerWidth - clientX, (-screen.y * 0.5 + 0.5) * window.innerHeight - clientY);
-    if (d < bestD) { best = stopIds[i]; bestD = d; }
-  });
-  return best;
-}
-/** The line whose road passes nearest the pointer on the screen. Only on a click: it projects every point of every road. */
-function lineAt(clientX: number, clientY: number): string | null {
-  let best: string | null = null, bestD = 10;
-  shapeLines.forEach(({ position }, s) => {
-    let px = 0, py = 0, ok = false;
-    for (let i = 0; i < position.count; i++) {
-      screen.set(position.getX(i), position.getY(i), position.getZ(i)).project(camera);
-      const x = (screen.x * 0.5 + 0.5) * window.innerWidth, y = (-screen.y * 0.5 + 0.5) * window.innerHeight, behind = screen.z > 1;
-      if (ok && !behind) {
-        const dx = x - px, dy = y - py, len2 = dx * dx + dy * dy;
-        const f = len2 > 0 ? Math.max(0, Math.min(1, ((clientX - px) * dx + (clientY - py) * dy) / len2)) : 0;
-        const d = Math.hypot(clientX - (px + f * dx), clientY - (py + f * dy));
-        if (d < bestD) { bestD = d; best = lineOfShape.get(shapeIds[s]) ?? null; }
-      }
-      px = x; py = y; ok = !behind;
-    }
-  });
-  return best;
-}
+const stopList = stopIds.map((id, i) => ({ id, x: stopXZ[i][0], z: stopXZ[i][1] }));
+const ground = (x: number, z: number) => kart?.heightAt(x, z) ?? 0;
+const picker = new Picker({ camera, store, ground, hidden: (line) => legend.isHidden(line), stops: stopList, roads: shapeLines });
+const stopHeight = (x: number, z: number) => ground(x, z) + Picker.LIFT;
 let down: { x: number; y: number } | null = null;
 canvas.addEventListener('pointerdown', (e) => { down = { x: e.clientX, y: e.clientY }; });
 canvas.addEventListener('pointerup', (e) => {
   if (riding || controls.walking || !down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 5) return;
-  const bus = busAt(e.clientX, e.clientY);
+  const bus = picker.bus(e.clientX, e.clientY);
   if (bus) return choose({ bus: bus.bus.id });
-  const stop = stopAt(e.clientX, e.clientY);
+  const stop = picker.stop(e.clientX, e.clientY);
   if (stop) return choose({ stop });
-  const line = lineAt(e.clientX, e.clientY);
+  const line = picker.line(e.clientX, e.clientY);
   choose(line ? { line } : {});
 });
-canvas.addEventListener('pointermove', (e) => { canvas.style.cursor = busAt(e.clientX, e.clientY) || stopAt(e.clientX, e.clientY) ? 'pointer' : 'grab'; });
-
-function delayText(delay: number): { text: string; cls: string } {
-  if (delay >= 60) return { text: `${Math.round(delay / 60)} min sein`, cls: 'late' };
-  if (delay <= -60) return { text: `${Math.round(-delay / 60)} min tidleg`, cls: 'early' };
-  return { text: 'i rute', cls: '' };
+let hoverCheck = 0;
+/** The hand over something that can be clicked; looked up at most every 80 ms, since it projects every bus and stop. */
+function updateCursor(now: number): void {
+  if (!lastPointer || now - hoverCheck < 80) return;
+  hoverCheck = now;
+  canvas.style.cursor = picker.bus(lastPointer.x, lastPointer.y) || picker.stop(lastPointer.x, lastPointer.y) ? 'pointer' : 'grab';
 }
 
-function clock(ms: number): string { return new Date(ms).toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' }); }
-function add(parent: HTMLElement, cls: string, text: string): HTMLElement {
-  const el = document.createElement('div');
-  el.className = cls; el.textContent = text;
-  parent.append(el);
-  return el;
-}
-function part(cls: string, text: string, color?: string): HTMLElement {
-  const el = document.createElement('span');
-  el.className = cls; el.textContent = text;
-  if (color) el.style.color = color;
-  return el;
-}
-function showStopInfo(id: string): void {
-  infoEl.hidden = false;
-  infoEl.replaceChildren();
-  add(infoEl, 'head', '').append(part('to', file.stops[id][0]));
-  add(infoEl, 'row', 'Haldeplass · linjer: ' + (linesAt(store.timetable, id).join(', ') || 'ingen'));
-  const delays = new Map([...store.tracks.values()].map((t) => [t.bus.id, t.bus.delay] as const));
-  const departures = nextDepartures(store.timetable, id, Date.now(), delays, 6);
-  if (!departures.length) add(infoEl, 'row', 'Ingen avgangar dei neste timane.');
-  for (const d of departures) {
-    const row = add(infoEl, 'row dep', '');
-    row.append(part('time', clock(d.at)), ' ', part('line', d.line, colorOf(d.line)), ' mot ' + d.headsign);
-    if (d.delay !== null && Math.abs(d.delay) >= 60) row.append(part(d.delay > 0 ? 'late' : 'early', ' (' + delayText(d.delay).text + ')'));
-  }
-  add(infoEl, 'row source', 'Berre linjene i kartet. Tider etter rutetabell, med forseinking for bussar vi ser på vegen.');
-}
-function showLineInfo(name: string): void {
-  const info = lineInfo(store.timetable, name, Date.now());
-  if (!info) { infoEl.hidden = true; return; }
-  infoEl.hidden = false;
-  infoEl.replaceChildren();
-  add(infoEl, 'head', '').append(part('badge', name, colorOf(name)), part('to', info.long));
-  add(infoEl, 'row', 'Mot ' + info.headsigns.join(' og '));
-  const running = [...store.tracks.values()].filter((t) => !t.leaving && t.bus.line === name).length;
-  add(infoEl, 'row', running + ' bussar på vegen no');
-  if (delayMode) {
-    const s = summarize([...store.tracks.values()].filter((t) => !t.leaving && t.bus.line === name).map((t) => t.bus));
-    add(infoEl, 'row', s.mean === null ? 'Gjennomsnittleg forseinking: ingen sanntidsdata' : `Gjennomsnittleg forseinking: ${delayLabel(s.mean)} (${s.measured} av ${s.total} bussar målt)`);
-  }
-  add(infoEl, 'row', info.trips ? 'I dag: ' + info.trips + ' turar, første ' + clock(info.first!) + ', siste framme ' + clock(info.last!) : 'Ingen turar i dag');
-  add(infoEl, 'row', 'Neste time: ' + info.nextHour + ' avgangar');
-}
-
+const panel = new InfoPanel(store, delayMode, (id) => ride(id));
 function showInfo(): void {
-  if (pickedStop) return showStopInfo(pickedStop);
-  if (pickedLine) return showLineInfo(pickedLine);
-  const t = selected ? store.tracks.get(selected) : undefined;
-  if (!t) { selected = null; infoEl.hidden = true; return; }
-  const b = t.bus, d = delayText(b.delay);
-  infoEl.hidden = false;
-  infoEl.innerHTML = `
-    <div class="head"><span class="badge" style="color:${colorOf(b.line)}"></span><span class="to"></span></div>
-    <div class="row"><b class="where"></b></div>
-    <div class="row">Forseinking: <b class="delay ${d.cls}"></b></div>
-    <div class="row source"></div>
-    <button id="ride" type="button"></button>`;
-  const rideButton = infoEl.querySelector<HTMLButtonElement>('#ride')!;
-  rideButton.textContent = riding === b.id ? 'Gå av bussen' : 'Sitt på bussen';
-  rideButton.addEventListener('click', () => ride(riding === b.id ? null : b.id));
-  infoEl.querySelector('.badge')!.textContent = b.line;
-  infoEl.querySelector('.to')!.textContent = `mot ${b.headsign}`;
-  infoEl.querySelector('.where')!.textContent = `${b.atStop ? 'Ved' : 'På veg til'} ${b.next}`;
-  infoEl.querySelector('.delay')!.textContent = d.text;
-  infoEl.querySelector('.source')!.textContent = b.live ? 'Sanntid frå Entur' : 'Etter rutetabell (ingen sanntidsdata)';
+  if (selected && !store.tracks.has(selected)) selected = null;
+  panel.show({ bus: selected, stop: pickedStop, line: pickedLine }, riding);
 }
 
 function showStatus(): void {
@@ -497,7 +349,7 @@ function frame(now: number): void {
   let ridden: Track | undefined;
   for (const t of store.tracks.values()) {
     if (t.bus.id === riding) { ridden = t; continue; } // from the seat the bus itself is not drawn
-    if (hiddenLines.has(t.bus.line)) continue;
+    if (legend.isHidden(t.bus.line)) continue;
     tmp.set(delayMode ? delayColor(t.bus.delay, t.bus.live) : colorOf(t.bus.line));
     const chosen = t.bus.id === selected;
     const ground = kart?.heightAt(t.x, t.z) ?? 0;
@@ -529,12 +381,13 @@ function frame(now: number): void {
   }
   controls.update(dt);
   syncWalk();
+  updateCursor(now);
   kart?.update(camera, controls.target, now);
   liftLines();
   keepAbove();
   weather.ease(dt);
   const cloud = weather.gloom;
-  const light = lightAt(skyTime ?? Date.now(), cloud);
+  const light = lightAt(hour.time(), cloud);
   applyLight(light);
   applySnow(snowCover(weather.temp));
   (scene.fog as FogExp2).color.copy(light.skyHorizon);

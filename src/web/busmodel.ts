@@ -11,6 +11,8 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 export const NEAR_FAR = 2500;
 export const NEAR_NEAR = 1000;
 export const BUS_LENGTH = 12;
+/** Room for this many buses at once, as lights and as models. The rush hour of all 97 lines is some hundreds; a bus past the limit is simply not drawn. */
+export const MAX_BUSES = 2048;
 
 /** 0 far away, 1 close: how much of the bus is the model. Smooth. */
 export function modelness(distance: number): number {
@@ -45,8 +47,9 @@ export class BusModels {
   private readonly euler = new Euler();
   private readonly scale = new Vector3();
   private readonly pos = new Vector3();
+  private readonly shade = new Color();
 
-  constructor(scene: Scene, readonly capacity = 512) {
+  constructor(scene: Scene, readonly capacity = MAX_BUSES) {
     const material = new MeshLambertMaterial({ vertexColors: true });
     this.mesh = new InstancedMesh(busGeometry(), material, capacity);
     this.mesh.count = 0;
@@ -84,7 +87,7 @@ export class BusModels {
     this.matrix.compose(this.pos, this.quat, this.scale);
     const i = this.mesh.count++;
     this.mesh.setMatrixAt(i, this.matrix);
-    this.mesh.setColorAt(i, color.clone().multiplyScalar(bright));
+    this.mesh.setColorAt(i, this.shade.copy(color).multiplyScalar(bright));
   }
 
   commit(): void {

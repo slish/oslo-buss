@@ -5,45 +5,16 @@
 //   npx tsx scripts/kartverket/osm.ts      (asks for the missing cells; safe to stop and run again)
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { CLIENT_NAME } from '../../src/shared/client';
 import { TILE_SIZE } from '../../src/shared/tiles';
 import { ORIGIN, toX, toZ } from '../../src/web/world';
+import { overpass, PAUSE_MS, sleep, type OsmWay } from '../overpass';
+
+export type { OsmWay };
 
 export const OSM_DIR = 'data-cache/osm-buildings';
 /** The cells of scripts/build-map.ts; its answers (roads and buildings) are reused where they exist. */
 export const OLD_DIR = 'data-cache/osm';
 export const CELL_LAT = 0.02, CELL_LON = 0.04;
-const SERVERS = ['https://overpass-api.de/api/interpreter', 'https://overpass.private.coffee/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
-const AGENT = `${CLIENT_NAME}/1.0 (https://github.com/slish/oslo-buss)`;
-const PAUSE_MS = 3000;
-
-export interface OsmWay { id: number; tags: Record<string, string>; geometry: { lat: number; lon: number }[] }
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-async function overpass(query: string): Promise<OsmWay[]> {
-  let wait = 5000;
-  for (let attempt = 0; attempt < 12; attempt++) {
-    const server = SERVERS[attempt % SERVERS.length];
-    try {
-      const response = await fetch(server, {
-        method: 'POST', headers: { 'user-agent': AGENT, 'content-type': 'application/x-www-form-urlencoded' },
-        body: `data=${encodeURIComponent(query)}`, signal: AbortSignal.timeout(120_000),
-      });
-      if (response.ok) {
-        const body = (await response.json()) as { elements?: OsmWay[]; remark?: string };
-        if (body.remark && /error|timed out|out of memory/i.test(body.remark)) throw new Error(body.remark);
-        if (Array.isArray(body.elements)) return body.elements;
-        throw new Error('no elements');
-      }
-      console.log(`  ${new URL(server).host} ${response.status}, tries again in ${wait / 1000} s`);
-    } catch (e) {
-      console.log(`  ${new URL(server).host}: ${e instanceof Error ? e.message : e}, tries again in ${wait / 1000} s`);
-    }
-    await sleep(wait);
-    wait = Math.min(wait * 2, 60_000);
-  }
-  throw new Error('Overpass did not answer');
-}
 
 /** The cells (i, j) of the grid that the tiles in data-cache/tiles/index.json touch. */
 export function cellsOfTiles(tiles: string[]): { i: number; j: number }[] {
@@ -67,7 +38,7 @@ export async function cell(i: number, j: number, ask = true): Promise<OsmWay[]> 
   }
   if (!ask) return [];
   const s = i * CELL_LAT, w = j * CELL_LON, box = `${s},${w},${s + CELL_LAT},${w + CELL_LON}`;
-  const elements = await overpass(`[out:json][timeout:90];way["building"](${box});out geom tags;`);
+  const elements = await overpass(`[out:json][timeout:90];way["building"](${box});out geom tags;`, 12);
   const slim: OsmWay[] = elements.filter((x) => x.geometry?.length).map((x) => {
     const t = x.tags ?? {}, tags: Record<string, string> = {};
     for (const k of ['building', 'height', 'building:levels', 'building:part', 'min_height']) if (t[k] !== undefined) tags[k] = t[k];

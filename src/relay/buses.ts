@@ -33,6 +33,9 @@ export async function fetchTripUpdates(tt: Timetable, fetcher: typeof fetch = fe
   return map;
 }
 
+/** How long one placing of the buses is reused, ms. */
+const ANSWER_SHARE_MS = 2000;
+
 export interface BusAnswer {
   /** When the answer was made, epoch ms. */
   at: number;
@@ -48,6 +51,7 @@ export class BusFeed {
   private updatedAt = 0;
   private pending: Promise<void> | null = null;
   private failedAt = 0;
+  private memo: { updatedAt: number; at: number; answer: BusAnswer } | null = null;
 
   constructor(
     readonly tt: Timetable,
@@ -72,9 +76,15 @@ export class BusFeed {
   async get(): Promise<BusAnswer> {
     await this.refresh();
     const now = this.now;
+    // Placing every bus is the work of the answer, so the answers of the same two seconds share it (a bus moves a few meters in that time,
+    // and `at` says when the positions are from).
+    const memo = this.memo;
+    if (memo && memo.updatedAt === this.updatedAt && now >= memo.at && now - memo.at < ANSWER_SHARE_MS) return memo.answer;
     const stale = now - this.updatedAt > (this.opts.keep ?? 5 * 60_000);
     // Past the keep time the old delays are worth less than the plain timetable.
     const buses = computeBuses(this.tt, stale ? new Map() : this.updates, now);
-    return { at: now, updatedAt: this.updatedAt, stale, buses };
+    const answer = { at: now, updatedAt: this.updatedAt, stale, buses };
+    this.memo = { updatedAt: this.updatedAt, at: now, answer };
+    return answer;
   }
 }

@@ -71,7 +71,6 @@ export class MapCamera {
   get walking(): boolean { return this.walker !== null; }
   /** Seen from a seat or from the ground: no distance to a target, so near/far and the like are set for a person. */
   get firstPerson(): boolean { return this.ridden !== null || this.walker !== null; }
-  get walkPosition(): { x: number; z: number } | null { return this.walker ? { x: this.walker.x, z: this.walker.z } : null; }
 
   /** Step down on the ground at `x, z` (looking `yaw` radians clockwise from north; the way the orbit camera looked by default). */
   startWalking(x: number, z: number, yaw = this.now.yaw + Math.PI): void {

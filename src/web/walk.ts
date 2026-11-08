@@ -80,33 +80,6 @@ export function lookDirection(s: WalkState): [number, number, number] {
   return [Math.sin(s.yaw) * c, Math.sin(s.pitch), -Math.cos(s.yaw) * c];
 }
 
-// ---- building footprints ----
-
-type Ring = readonly (readonly [number, number])[];
-
-/** Even-odd test of a point against a ring (open or closed). */
-export function pointInRing(x: number, z: number, ring: Ring): boolean {
-  let inside = false;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const [xi, zi] = ring[i], [xj, zj] = ring[j];
-    if (zi > z !== zj > z && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside;
-  }
-  return inside;
-}
-
-export interface Footprint { minX: number; maxX: number; minZ: number; maxZ: number; ring: Ring }
-
-export function footprintOf(ring: Ring): Footprint {
-  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-  for (const [x, z] of ring) { minX = Math.min(minX, x); maxX = Math.max(maxX, x); minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z); }
-  return { minX, maxX, minZ, maxZ, ring };
-}
-
-export function insideAny(x: number, z: number, list: readonly Footprint[]): boolean {
-  for (const f of list) if (x >= f.minX && x <= f.maxX && z >= f.minZ && z <= f.maxZ && pointInRing(x, z, f.ring)) return true;
-  return false;
-}
-
 // ---- input ----
 
 /** The keys, the mouse and the fingers, as the numbers `stepWalk` and `lookBy` want. `enable(true)` starts listening. */

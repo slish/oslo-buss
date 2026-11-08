@@ -30,7 +30,7 @@ describe('lightAt', () => {
 
 describe('snowCover', () => {
   it('is nothing at 0 degrees and above, a little just below, and all of it at -10', async () => {
-    const { snowCover } = await import('../src/web/daylight');
+    const { snowCover } = await import('../src/web/mapshader');
     expect(snowCover(3)).toBe(0); expect(snowCover(0)).toBe(0);
     expect(snowCover(-1)).toBeCloseTo(0.1); expect(snowCover(-5)).toBeCloseTo(0.5);
     expect(snowCover(-10)).toBe(1); expect(snowCover(-25)).toBe(1);

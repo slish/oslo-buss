@@ -9,56 +9,20 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
-import { CLIENT_NAME } from '../src/shared/client';
 import { SegmentIndex, simplifyXY, type XY } from '../src/shared/geom';
 import { buildingHeight, encodePoints, ROAD_CLASSES, roadClass, type MapFile } from '../src/shared/map';
 import { Timetable, type TimetableFile } from '../src/shared/timetable';
 import { toX, toZ } from '../src/web/world';
+import { overpass, PAUSE_MS, sleep, type OsmWay as Raw } from './overpass';
 
 const OUT = 'public/data/map.json';
 const CACHE = 'data-cache/osm';
-const SERVERS = [
-  'https://overpass-api.de/api/interpreter',
-  'https://overpass.private.coffee/api/interpreter',
-  'https://overpass.kumi.systems/api/interpreter',
-];
-const AGENT = `${CLIENT_NAME}/1.0 (https://github.com/slish/oslo-buss)`;
 /** Tile size in degrees: about 2.2 km by 2.2 km at Oslo's latitude. */
 const TILE_LAT = 0.02, TILE_LON = 0.04;
 /** Buildings are kept this close to a line (meters), and the smaller roads this close. */
 const BUILDING_CORRIDOR = 300;
 const ROAD_CORRIDOR = 900;
 const MIN_BUILDING_AREA = 15;
-const PAUSE_MS = 3000;
-
-interface Raw { id: number; tags: Record<string, string>; geometry: { lat: number; lon: number }[] }
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-async function overpass(query: string): Promise<Raw[]> {
-  let wait = 5000;
-  for (let attempt = 0; attempt < 9; attempt++) {
-    const server = SERVERS[attempt % SERVERS.length];
-    try {
-      const response = await fetch(server, {
-        method: 'POST', headers: { 'user-agent': AGENT, 'content-type': 'application/x-www-form-urlencoded' },
-        body: `data=${encodeURIComponent(query)}`, signal: AbortSignal.timeout(120_000),
-      });
-      if (response.ok) {
-        const body = (await response.json()) as { elements?: Raw[]; remark?: string };
-        if (body.remark && /error|timed out|out of memory/i.test(body.remark)) throw new Error(body.remark);
-        if (Array.isArray(body.elements)) return body.elements;
-        throw new Error('no elements');
-      }
-      console.log(`  ${new URL(server).host} ${response.status}, tries again in ${wait / 1000} s`);
-    } catch (e) {
-      console.log(`  ${new URL(server).host}: ${e instanceof Error ? e.message : e}, tries again in ${wait / 1000} s`);
-    }
-    await sleep(wait);
-    wait = Math.min(wait * 2, 60_000);
-  }
-  throw new Error('Overpass did not answer');
-}
 
 const HIGHWAYS = 'motorway|motorway_link|trunk|trunk_link|primary|primary_link|secondary|secondary_link|tertiary|tertiary_link|residential|unclassified|living_street';
 

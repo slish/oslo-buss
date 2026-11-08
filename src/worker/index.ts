@@ -8,21 +8,22 @@ export { Feeds } from './feeds';
 
 const LIVE = new Set(['/feeds/buses', '/data/timetable.json']);
 
+/** The same response, readable from any page. */
+function open(response: Response): Response {
+  const out = new Response(response.body, response);
+  out.headers.set('access-control-allow-origin', '*');
+  return out;
+}
+
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === '/feeds/weather' && (request.method === 'GET' || request.method === 'HEAD')) {
-      const response = await weather(request, ctx);
-      const out = new Response(response.body, response);
-      out.headers.set('access-control-allow-origin', '*');
-      return out;
+      return open(await weather(request, ctx));
     }
     if (!LIVE.has(url.pathname)) return env.ASSETS.fetch(request);
     if (request.method !== 'GET' && request.method !== 'HEAD') return new Response('Method not allowed', { status: 405, headers: { allow: 'GET, HEAD' } });
     // One object for everyone: it is what keeps Entur's load at one request every 15 s.
-    const response = await env.FEEDS.get(env.FEEDS.idFromName('main')).fetch(request);
-    const out = new Response(response.body, response);
-    out.headers.set('access-control-allow-origin', '*');
-    return out;
+    return open(await env.FEEDS.get(env.FEEDS.idFromName('main')).fetch(request));
   },
 } satisfies ExportedHandler<Env>;
