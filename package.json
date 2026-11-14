@@ -35,7 +35,7 @@
     "yauzl": "^3.4.0"
   },
   "dependencies": {
-    "@types/proj4": "^2.5.6",
+    "@types/proj4": "^2.19.0",
     "proj4": "^2.22.0",
     "three": "^0.187.0"
   },
