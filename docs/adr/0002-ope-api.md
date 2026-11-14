@@ -50,7 +50,7 @@ filtrert og bearbeidd. Tenesta har ingen personopplysningar og ingen brukarkonto
 - Enkelt for andre å bruke.
 
 **Negative, og kva vi gjer med dei:**
-- Misbruk kan ta dagskvoten på gratisplanen og slå ut tenesta. Oppdaga via `/health` og ein uptime-sjekk (ikkje sett opp enno).
+- Misbruk kan ta dagskvoten på gratisplanen og slå ut tenesta. Oppdaga via `/health` og ein uptime-sjekk i UptimeRobot.
 - På betalt plan (Workers Paid) er trafikken ein variabel kostnad som ikkje kan skrivast av.
 
 ## Vurder på nytt når

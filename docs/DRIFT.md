@@ -28,9 +28,12 @@ Korleis tenesta køyrer, kva som skjer når noko svikter, og kva som er val med 
 ## Helsesjekk
 
 `GET /health` gir 200 når tidstabellen er lasta og yngre enn 36 timar, elles 503, med JSON om alderen og tidspunktet for siste
-Entur-oppdatering. Han spør ikkje Entur og kostar éin liten førespurnad til objektet. Peik ein uptime-sjekk (til dømes
-UptimeRobot, Cloudflare Health Checks eller Azure Application Insights availability test) mot
-`https://oslo-buss.oslo-buss.workers.dev/health`.
+Entur-oppdatering. Han spør ikkje Entur og kostar éin liten førespurnad til objektet.
+
+**Varsling:** UptimeRobot sjekkar `https://oslo-buss.oslo-buss.workers.dev/health` og varslar når han ikkje svarar 200. Sjekken slår ut
+når tidstabellen manglar eller er eldre enn 36 timar (nattjobben har feila fleire netter), eller når Worker-en ikkje svarar i det heile
+(til dømes at dagskvoten er brukt opp). Entur-feil gir ikkje alarm, med vilje: bussane følgjer då rutetabellen. Same sjekk på Azure er
+ein Application Insights availability test, og i Cloudflare ein Health Check.
 
 ## Kostnad
 
@@ -72,7 +75,5 @@ UptimeRobot, Cloudflare Health Checks eller Azure Application Insights availabil
 
 ## Ikkje gjort enno
 
-- Varsling: ein uptime-sjekk på `/health` må settast opp utanfor repoet. GitHub sender e-post når ein planlagd workflow feilar,
-  men det er ikkje det same som eit varsel til drift.
 - Staging-miljø.
 - Cache API framfor objektet: det fungerer ikkje på `workers.dev`, berre med eige domene (sjå HOSTING.md).
