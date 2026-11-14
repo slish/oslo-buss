@@ -9,5 +9,5 @@
     "types": ["@cloudflare/workers-types"],
     "noEmit": true
   },
-  "include": ["src/worker", "src/relay/buses.ts", "src/shared"]
+  "include": ["src/worker", "src/relay/buses.ts", "src/shared", "tests/worker.test.ts"]
 }

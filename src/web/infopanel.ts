@@ -96,6 +96,6 @@ export class InfoPanel {
     el.querySelector('.to')!.textContent = `mot ${b.headsign}`;
     el.querySelector('.where')!.textContent = `${b.atStop ? 'Ved' : 'På veg til'} ${b.next}`;
     el.querySelector('.delay')!.textContent = d.text;
-    el.querySelector('.source')!.textContent = b.live ? 'Sanntid frå Entur' : 'Etter rutetabell (ingen sanntidsdata)';
+    el.querySelector('.source')!.textContent = b.live ? 'Forseinking frå Entur sanntid, posisjon berekna etter rutetabell' : 'Etter rutetabell (ingen sanntidsdata)';
   }
 }

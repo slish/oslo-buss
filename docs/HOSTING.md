@@ -74,8 +74,11 @@ med så smale rettar som mogleg, og slett det i Cloudflare om du er i tvil.
 Dette er eit grovt anslag frå prisane til Cloudflare (sjekk [prisane](https://developers.cloudflare.com/durable-objects/platform/pricing/) før du lanserer):
 
 - **Å lese Entur sin feed (6 MB) kostar ca. 8 ms CPU** per henting etter at parseren hoppar over andre operatørar (vi byrja på 45–73 ms).
-  Det er målt på ei lokal maskin, ikkje på Cloudflare. Gratisplanen har ei CPU-grense på ca. 10 ms per førespurnad, så det
-  kan gå, men er knapt. Sjekk loggane (`observability` er på) etter første dag.
+  Det talet er målt på ei lokal maskin. På Cloudflare viste CPU-grafen for Workeren ein toppverdi på 2,64 ms og ingen feil
+  (lesen 14. november 2026). Gratisplanen har ei CPU-grense på ca. 10 ms per
+  førespurnad, så det er god margin. Sjekk grafen på nytt om du legg til fleire linjer.
+- **Helsesjekk:** `GET /health` gir 200 når tidstabellen er lasta og yngre enn 36 timar, elles 503. Han spør ikkje Entur, så
+  ein uptime-sjekk kvart minutt held ikkje Entur-henting i gang.
 - **Workers Paid** (5 dollar i månaden) har 30 sekund CPU og er det trygge valet om gratisplanen gir CPU-feil.
 - Ein spelar som lèt sida stå oppe i ein time gir ca. 240 førespurnader til objektet. Hundre timar i døgnet er rundt 24 000
   førespurnader, vel innanfor det som er inkludert.

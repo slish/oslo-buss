@@ -58,6 +58,9 @@ export class BusFeed {
     private readonly opts: { ttl?: number; keep?: number; retry?: number; fetcher?: typeof fetch; now?: () => number; onError?: (e: unknown) => void } = {},
   ) {}
 
+  /** When Entur was last heard from, epoch ms (0 if never). Asks nobody. */
+  get lastUpdate(): number { return this.updatedAt; }
+
   private get now() { return this.opts.now?.() ?? Date.now(); }
 
   /** Refreshes when the copy is older than the TTL, sharing one fetch. A failed fetch is not repeated for `retry` ms. */

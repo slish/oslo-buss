@@ -1,8 +1,12 @@
 # oslo-buss
 
+[![CI](https://github.com/slish/oslo-buss/actions/workflows/ci.yml/badge.svg)](https://github.com/slish/oslo-buss/actions/workflows/ci.yml)
+
 Fanprosjekt: **Ruter-bussar i Oslo og Bærum som lyspunkt og bussmodellar i eit 3D-kart**, med sanntid frå Entur, Kartverket-terreng og -bygg, døgnrytme og vêr. Du kan sjå heile nettet frå oven, setje deg på ein buss, eller stå på bakken og gå rundt.
 
 **Live:** https://oslo-buss.oslo-buss.workers.dev
+
+![Bussar over Grorud ved dagslys: lyspunkt, bygg med tak og terreng](docs/skjermbilete.jpg)
 
 Alle 97 bussliner som køyrer i Oslo og Bærum er med (`DEFAULT_LINES` i `scripts/build-timetable.ts`).
 
@@ -94,6 +98,14 @@ Dei store kartfilene (`data-cache/`) er ikkje i git. I dev blir flisene tenerte 
 Kartverket-fliser og alt om dei står i `docs/KARTVERKET.md`. Kartverket sine data er CC BY 4.0. Flyfoto («Norge i bilder») er ikkje brukt, fordi lisensen (Norge digitalt) ikkje passar.
 
 Entur ber alle klientar sende `ET-Client-Name` (`firma-applikasjon`). Namnet står i `src/shared/client.ts`.
+
+## Drift og val
+
+`GET /health` gir 200 når tidstabellen er fersk, elles 503 (for ein uptime-sjekk). Kva som skjer når Entur eller GitHub svikter, kva som er val med eit pris, og kva delane svarar til på Azure, står i [docs/DRIFT.md](docs/DRIFT.md). Oppsett og kostnad er i [docs/HOSTING.md](docs/HOSTING.md).
+
+## Korleis prosjektet er laga
+
+Mykje av koden er skriven saman med Claude Code, og mange commits har Claude som medforfattar (`Co-Authored-By` i loggen). Testane køyrer i CI på kvar push. Kommentarar i koden er på engelsk og dokumentasjon og brukartekst på nynorsk.
 
 ## Avgrensingar og kjende ting
 
