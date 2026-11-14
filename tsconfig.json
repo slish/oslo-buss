@@ -22,6 +22,7 @@
     "tests"
   ],
   "exclude": [
-    "src/worker"
+    "src/worker",
+    "tests/worker.test.ts"
   ]
 }

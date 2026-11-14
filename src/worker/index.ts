@@ -1,4 +1,4 @@
-// The Worker: serves the built page from its assets, and sends the two live paths to the feeds' Durable Object.
+// The Worker: serves the built page from its assets, and sends the live paths to the feeds' Durable Object.
 // Everything else is a static file and never reaches this code (wrangler.jsonc: run_worker_first).
 
 import type { Env } from './feeds';
@@ -6,7 +6,7 @@ import { weather } from './weather';
 
 export { Feeds } from './feeds';
 
-const LIVE = new Set(['/feeds/buses', '/data/timetable.json']);
+const LIVE = new Set(['/feeds/buses', '/data/timetable.json', '/health']);
 
 /** The same response, readable from any page. */
 function open(response: Response): Response {

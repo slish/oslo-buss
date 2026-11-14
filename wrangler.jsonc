@@ -10,7 +10,7 @@
     "binding": "ASSETS",
     "not_found_handling": "none",
     // Only these reach the Worker; every other path is a file, served free and without running any code.
-    "run_worker_first": ["/feeds/*", "/data/timetable.json"]
+    "run_worker_first": ["/feeds/*", "/data/timetable.json", "/health"]
   },
   "durable_objects": {
     "bindings": [{ "name": "FEEDS", "class_name": "Feeds" }]

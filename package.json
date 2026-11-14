@@ -2,6 +2,7 @@
   "name": "oslo-buss",
   "version": "0.1.0",
   "private": true,
+  "engines": { "node": ">=24" },
   "type": "module",
   "description": "Fanprosjekt: Oslo-busser som lyspunkt, basert på åpne data fra Entur",
   "scripts": {
@@ -9,7 +10,7 @@
     "relay": "tsx src/relay/dev-server.ts",
     "smoke": "tsx scripts/smoke.ts",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.worker.json",
-    "test": "vitest run",
+    "test": "vitest run --configLoader runner",
     "check-timetable": "tsx scripts/check-timetable.ts",
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
