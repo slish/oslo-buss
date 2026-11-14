@@ -69,7 +69,8 @@ jobs:
           cp "$RUNNER_TEMP/timetable.json" timetable.json
           cp "$RUNNER_TEMP"/kept/timetable-*.json . 2>/dev/null || true
           ls -1 timetable-*.json | sort -r | tail -n +8 | xargs -r rm
-          git add .
+          # Only the timetables: after `git rm` the .gitignore is gone, and a plain `git add .` would take node_modules along.
+          git add timetable.json timetable-*.json
           git commit --quiet -m "Tidstabell $(date -u +%F)${RESTORE:+ (tilbake til $RESTORE)}"
           git push --force origin data
         env:
