@@ -6,7 +6,7 @@ Oslo-buss køyrer som ein Cloudflare Worker utan tenar å vedlikehalde.
 |---|---|---|
 | Sida (`dist/`) og kartflisene | Worker static assets | Gratis og ubegrensa, køyrer ingen kode |
 | `/feeds/buses` og `/data/timetable.json` | Worker → ein Durable Object (`Feeds`) | Sjå under |
-| `/feeds/weather` | Worker, mellomlagra i 30 min (Cache API) | Ubetydeleg: ein førespurnad til MET kvar halvtime |
+| `/feeds/weather` | Worker, mellomlagra i 30 min (minnet i Worker-en, og Cache API med eige domene) | Ubetydeleg: ein førespurnad til MET kvar halvtime |
 | Dagleg tidstabell | GitHub Action → grenen `data` i dette repoet | Gratis |
 
 ## Korleis det heng saman
@@ -21,7 +21,7 @@ Oslo-buss køyrer som ein Cloudflare Worker utan tenar å vedlikehalde.
   relayen bruker.
 - **Vêret** (`/feeds/weather`, `src/worker/weather.ts`) går ikkje via objektet. Workeren hentar frå MET Norway sitt
   locationforecast-API med `User-Agent: slish-oslo-buss github.com/slish/oslo-buss` (MET krev namn på appen og kontaktinfo),
-  reduserer svaret til nokre tal og mellomlagrar det i 30 minutt med Cache API. Vilkåra krev kreditering, som står i botnen av sida.
+  reduserer svaret til nokre tal og mellomlagrar det i 30 minutt, i minnet til Worker-en (`src/worker/memo.ts`) og i Cache API. Vilkåra krev kreditering, som står i botnen av sida.
 - **Kartflisene** blir henta frå grenen `tiles` av deploy-flyten og følgjer med bygget som vanlege filer. `public/.assetsignore` held
   ein lokal `timetable.json` ute av opplastinga: Worker-en svarar på den stien.
 
@@ -87,7 +87,7 @@ Dette er eit grovt anslag frå prisane til Cloudflare (sjekk [prisane](https://d
 
 `workers.dev` fungerer rett frå start. For eige domene legg du til ei `routes`-linje i `wrangler.jsonc`
 (`{ "pattern": "oslo-buss.example", "custom_domain": true }`) og eig domenet gjennom Cloudflare.
-Cache API verkar ikkje på `workers.dev`, men Workeren treng det ikkje.
+Cache API verkar ikkje på `workers.dev`, så der er det berre bufferen i minnet til Worker-en (`src/worker/memo.ts`) som held MET og objektet unna: ein isolate spør på nytt etter 30 minutt (vêr) eller 4 sekund (bussar), og det finst mange isolatar. Med eige domene verkar Cache API òg.
 
 ## Endre kva linjer som er med
 

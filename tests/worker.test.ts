@@ -7,6 +7,7 @@ vi.mock('cloudflare:workers', () => ({
 }));
 
 const { Feeds } = await import('../src/worker/feeds');
+const { forgetAll } = await import('../src/worker/memo');
 const worker = (await import('../src/worker/index')).default;
 
 const URL_TIMETABLE = 'https://example.test/timetable.json';
@@ -32,6 +33,7 @@ let answers: Record<string, () => Response>;
 let asked: { url: string; headers: Headers }[];
 
 beforeEach(() => {
+  forgetAll();
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(NOW);
   asked = [];
@@ -165,5 +167,17 @@ describe('the Worker', () => {
     const response = await worker.fetch(get('/health'), env(), ctx);
     expect(response.status).toBe(200);
     expect(response.headers.get('access-control-allow-origin')).toBe('*');
+  });
+
+  it('asks the object once for the buses within a few seconds, and again after that', async () => {
+    const calls = vi.spyOn(Feeds.prototype, 'fetch');
+    const e = env();
+    answers[ENTUR] = () => new Response(new Uint8Array(), { status: 200 });
+    await worker.fetch(get('/feeds/buses'), e, ctx);
+    await worker.fetch(get('/feeds/buses'), e, ctx);
+    expect(calls).toHaveBeenCalledTimes(1);
+    vi.setSystemTime(NOW + 5000);
+    await worker.fetch(get('/feeds/buses'), e, ctx);
+    expect(calls).toHaveBeenCalledTimes(2);
   });
 });
