@@ -101,7 +101,7 @@ Entur ber alle klientar sende `ET-Client-Name` (`firma-applikasjon`). Namnet st�
 
 ## Drift og val
 
-`GET /health` gir 200 n책r tidstabellen er fersk, elles 503 (for ein uptime-sjekk). Kva som skjer n책r Entur eller GitHub svikter, kva som er val med eit pris, og kva delane svarar til p책 Azure, st책r i [docs/DRIFT.md](docs/DRIFT.md). Oppsett og kostnad er i [docs/HOSTING.md](docs/HOSTING.md).
+`GET /health` gir 200 n책r tidstabellen er fersk, elles 503 (for ein uptime-sjekk). Kva som skjer n책r Entur eller GitHub svikter, kva som er val med eit pris, og kva delane svarar til p책 Azure, st책r i [docs/DRIFT.md](docs/DRIFT.md). Dei store avgjerdene er skrivne som arkitekturavgjerder (alternativ, val, fordelar og ulemper) i [docs/adr](docs/adr/README.md). Oppsett og kostnad er i [docs/HOSTING.md](docs/HOSTING.md).
 
 ## Korleis prosjektet er laga
 

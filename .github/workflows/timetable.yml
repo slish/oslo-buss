@@ -12,6 +12,10 @@ on:
         description: 'Linjer (skilde med mellomrom), til dømes "20 31 63". Tomt gir standardlista i scripts/build-timetable.ts.'
         required: false
         default: ''
+      restore:
+        description: 'Gå tilbake til tidstabellen frå ein dato, til dømes "2026-11-12" (ei av dei siste 7 dagane på grenen data). Tomt bygger ein ny.'
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -31,24 +35,42 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Bygg tidstabellen
+        if: inputs.restore == ''
         run: npm run timetable -- --fresh $LINES
         env:
           LINES: ${{ inputs.lines }}
       - name: Sjekk at han er fornuftig
+        if: inputs.restore == ''
         run: npm run check-timetable
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+      - if: inputs.restore == ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: timetable
           path: public/data/timetable.json
           retention-days: 7
       - name: Publiser til grenen data
         run: |
-          cp public/data/timetable.json "$RUNNER_TEMP/timetable.json"
+          mkdir "$RUNNER_TEMP/kept"
+          # The last days' timetables stay on the branch as dated files, so that there is something to go back to.
+          if git fetch --quiet --depth=1 origin data; then
+            git ls-tree --name-only FETCH_HEAD | grep -E '^timetable-[0-9]{4}-[0-9]{2}-[0-9]{2}\.json$' | while read -r f; do git show "FETCH_HEAD:$f" > "$RUNNER_TEMP/kept/$f"; done
+          fi
+          if [ -n "$RESTORE" ]; then
+            [ -f "$RUNNER_TEMP/kept/timetable-$RESTORE.json" ] || { echo "::error::Fann ingen tidstabell frå $RESTORE på grenen data"; exit 1; }
+            cp "$RUNNER_TEMP/kept/timetable-$RESTORE.json" "$RUNNER_TEMP/timetable.json"
+          else
+            cp public/data/timetable.json "$RUNNER_TEMP/timetable.json"
+            cp "$RUNNER_TEMP/timetable.json" "$RUNNER_TEMP/kept/timetable-$(date -u +%F).json"
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout --orphan data
           git rm -rf . --quiet
           cp "$RUNNER_TEMP/timetable.json" timetable.json
-          git add timetable.json
-          git commit --quiet -m "Tidstabell $(date -u +%F)"
+          cp "$RUNNER_TEMP"/kept/timetable-*.json . 2>/dev/null || true
+          ls -1 timetable-*.json | sort -r | tail -n +8 | xargs -r rm
+          git add .
+          git commit --quiet -m "Tidstabell $(date -u +%F)${RESTORE:+ (tilbake til $RESTORE)}"
           git push --force origin data
+        env:
+          RESTORE: ${{ inputs.restore }}
