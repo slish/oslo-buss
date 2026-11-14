@@ -23,15 +23,15 @@
     "kartverket:fine": "tsx scripts/kartverket/build-fine-terrain.ts"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20261106.1",
+    "@cloudflare/workers-types": "^5.20261110.1",
     "@types/node": "^26.6.6",
     "@types/three": "^0.187.0",
     "@types/yauzl": "^3.4.0",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
-    "vite": "^8.3.6",
+    "vite": "^8.3.8",
     "vitest": "^5.1.0",
-    "wrangler": "^4.158.0",
+    "wrangler": "^4.160.0",
     "yauzl": "^3.4.0"
   },
   "dependencies": {
