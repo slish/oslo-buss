@@ -6,7 +6,7 @@ Fanprosjekt: **Ruter-bussar i Oslo og Bærum som lyspunkt og bussmodellar i eit 
 
 **Live:** https://oslo-buss.oslo-buss.workers.dev
 
-![Bussar over Grorud ved dagslys: lyspunkt, bygg med tak og terreng](docs/skjermbilete 2.jpg)
+![Bussar over Grorud ved dagslys: lyspunkt, bygg med tak og terreng](docs/Skjermbilete%202.png)
 
 Alle 97 bussliner som køyrer i Oslo og Bærum er med (`DEFAULT_LINES` i `scripts/build-timetable.ts`).
 
