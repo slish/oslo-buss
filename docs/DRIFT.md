@@ -1,7 +1,7 @@
 # Drift
 
 Korleis tenesta køyrer, kva som skjer når noko svikter, og kva som er val med eit pris. Oppsettet står i
-[HOSTING.md](HOSTING.md); her er det feilscenaria og vala. Vala er skrivne ut med alternativ og konsekvensar i [adr/](adr/README.md).
+[HOSTING.md](HOSTING.md); her er det feilscenaria og vala. Vala er skrivne ut med alternativ og konsekvensar i [adr/](adr/README.md), og delane er teikna i [arkitektur.md](arkitektur.md).
 
 ## Delane
 
